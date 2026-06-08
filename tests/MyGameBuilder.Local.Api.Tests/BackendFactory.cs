@@ -30,6 +30,9 @@ public sealed class BackendFactory : WebApplicationFactory<Program>
             {
                 ["PieceStore:ArchiveRoot"] = _archive.ArchiveRoot,
                 ["PieceStore:DataRoot"] = _archive.DataRoot,
+                // Keep the front-end static root inside the temp tree so tests never create a
+                // frontend/ folder in the project content root (TempArchive cleans this up).
+                ["Frontend:RootPath"] = Path.Combine(_archive.Root, "frontend"),
                 // Neutralize the appsettings Kestrel endpoint so the test server binds an ephemeral port.
                 ["Kestrel:Endpoints:Http:Url"] = "http://127.0.0.1:0",
             });

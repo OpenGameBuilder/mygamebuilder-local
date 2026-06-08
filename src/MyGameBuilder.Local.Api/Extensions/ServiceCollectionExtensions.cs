@@ -24,6 +24,7 @@ public static class ServiceCollectionExtensions
 
         services.Configure<PieceStoreOptions>(configuration.GetSection(PieceStoreOptions.SectionName));
         services.Configure<ServerOptions>(configuration.GetSection(ServerOptions.SectionName));
+        services.Configure<FrontendOptions>(configuration.GetSection(FrontendOptions.SectionName));
 
         // The launch token is sourced from the environment so a launcher can confirm
         // it reached this specific instance via /healthz. PostConfigure runs after

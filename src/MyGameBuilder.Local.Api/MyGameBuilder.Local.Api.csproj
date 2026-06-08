@@ -11,6 +11,10 @@
     <Content Remove="data\**" />
     <EmbeddedResource Remove="data\**" />
     <None Remove="data\**" />
+    <Compile Remove="frontend\**" />
+    <Content Remove="frontend\**" />
+    <EmbeddedResource Remove="frontend\**" />
+    <None Remove="frontend\**" />
   </ItemGroup>
 
   </Project>

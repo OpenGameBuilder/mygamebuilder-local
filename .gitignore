@@ -430,6 +430,8 @@ FodyWeavers.xsd
 
 # MyGameBuilder Local backend runtime piece-store data and external archive snapshot.
 # The writable overlay (data/) is generated at runtime; the archive/ snapshot is
-# large external static content supplied out-of-band, not source.
+# large external static content supplied out-of-band, not source. The front-end
+# bundle (frontend/) is the external Flash client (SWF + assets), also out-of-band.
 src/MyGameBuilder.Local.Api/data/
 src/MyGameBuilder.Local.Api/archive/
+src/MyGameBuilder.Local.Api/frontend/
