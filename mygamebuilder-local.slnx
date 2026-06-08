@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".gitignore" />
+    <File Path=".vsconfig" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="Directory.Packages.props" />
+    <File Path="docs/FORMATS.md" />
+    <File Path="docs/mgb_local_server.py" />
+    <File Path="docs/README.md" />
+    <File Path="global.json" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/MyGameBuilder.Local.Api/MyGameBuilder.Local.Api.csproj" Id="79f06aea-2026-46a5-beab-9a5f1c6719e9" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MyGameBuilder.Local.Api.Tests/MyGameBuilder.Local.Api.Tests.csproj" />
+  </Folder>
+</Solution>

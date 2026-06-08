@@ -1,0 +1,6 @@
+@MyGameBuilder.Local.Api_HostAddress = http://localhost:5120
+
+GET {{MyGameBuilder.Local.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

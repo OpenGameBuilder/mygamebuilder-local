@@ -427,3 +427,9 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# MyGameBuilder Local backend runtime piece-store data and external archive snapshot.
+# The writable overlay (data/) is generated at runtime; the archive/ snapshot is
+# large external static content supplied out-of-band, not source.
+src/MyGameBuilder.Local.Api/data/
+src/MyGameBuilder.Local.Api/archive/
