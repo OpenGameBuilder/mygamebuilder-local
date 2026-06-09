@@ -72,19 +72,29 @@ public sealed class ArchivePieceStore
             return [];
         }
 
-        return _cache.GetOrCreate(PrefixCacheTag + prefix, cacheEntry =>
+        var cacheKey = PrefixCacheTag + prefix;
+        if (_cache.TryGetValue(cacheKey, out IReadOnlyList<PieceEntry>? cached))
         {
-            var results = new List<PieceEntry>();
-            var startDirectory = ResolveDirectoryForPrefix(_archiveRoot, prefix);
-            if (startDirectory is not null)
-            {
-                CollectEntries(startDirectory, prefix, results);
-            }
+            return cached ?? [];
+        }
 
-            cacheEntry.Size = results.Count + 1;
-            cacheEntry.SlidingExpiration = TimeSpan.FromMinutes(10);
-            return (IReadOnlyList<PieceEntry>)results;
-        })!;
+        var startDirectory = ResolveDirectoryForPrefix(_archiveRoot, prefix);
+        if (startDirectory is null)
+        {
+            // A missing prefix can be transient while an archive is being copied into
+            // place. Do not cache the miss; let the next request re-check the disk.
+            return [];
+        }
+
+        var results = new List<PieceEntry>();
+        CollectEntries(startDirectory, prefix, results);
+
+        using var cacheEntry = _cache.CreateEntry(cacheKey);
+        cacheEntry.Size = results.Count + 1;
+        cacheEntry.SlidingExpiration = TimeSpan.FromMinutes(10);
+        cacheEntry.Value = results;
+
+        return results;
     }
 
     /// <summary>True when <paramref name="user"/> has a top-level entry in the root index and its directory exists.</summary>
@@ -244,33 +254,46 @@ public sealed class ArchivePieceStore
     /// <summary>Reads and caches a directory's <c>_index.json</c>. Returns null when absent or unparseable.</summary>
     private ArchiveIndexDocument? ReadIndex(string directory)
     {
-        return _cache.GetOrCreate(IndexCacheTag + directory, cacheEntry =>
+        var cacheKey = IndexCacheTag + directory;
+        if (_cache.TryGetValue(cacheKey, out ArchiveIndexDocument? cached))
         {
-            var path = Path.Combine(directory, IndexFileName);
-            ArchiveIndexDocument? document = null;
-            try
-            {
-                var bytes = StripUtf8Bom(File.ReadAllBytes(path));
-                document = JsonSerializer.Deserialize<ArchiveIndexDocument>(bytes);
-            }
-            catch (FileNotFoundException)
-            {
-            }
-            catch (DirectoryNotFoundException)
-            {
-            }
-            catch (JsonException)
-            {
-            }
-            catch (IOException)
-            {
-            }
+            return cached;
+        }
 
-            // Size scales with entry count so the large root index is weighted heavily.
-            cacheEntry.Size = (document?.Entries.Count ?? 0) + 1;
-            cacheEntry.SlidingExpiration = TimeSpan.FromMinutes(10);
-            return document;
-        });
+        var path = Path.Combine(directory, IndexFileName);
+        ArchiveIndexDocument? document = null;
+        try
+        {
+            var bytes = StripUtf8Bom(File.ReadAllBytes(path));
+            document = JsonSerializer.Deserialize<ArchiveIndexDocument>(bytes);
+        }
+        catch (FileNotFoundException)
+        {
+        }
+        catch (DirectoryNotFoundException)
+        {
+        }
+        catch (JsonException)
+        {
+        }
+        catch (IOException)
+        {
+        }
+
+        if (document is null)
+        {
+            // Treat absent, incomplete, or temporarily unreadable indexes as a
+            // request-local miss. Caching null here makes an archive copied into
+            // place after startup look empty until the cache entry expires.
+            return null;
+        }
+
+        using var cacheEntry = _cache.CreateEntry(cacheKey);
+        // Size scales with entry count so the large root index is weighted heavily.
+        cacheEntry.Size = document.Entries.Count + 1;
+        cacheEntry.SlidingExpiration = TimeSpan.FromMinutes(10);
+        cacheEntry.Value = document;
+        return document;
     }
 
     /// <summary>Reads the sidecar for an indexed body and builds a <see cref="PieceEntry"/>; null when the body is missing.</summary>

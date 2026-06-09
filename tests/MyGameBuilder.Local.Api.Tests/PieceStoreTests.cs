@@ -206,6 +206,44 @@ public sealed class PieceStoreTests
         Assert.NotNull(await store.GetAsync("alice/p/tile/A"));
     }
 
+    [Fact]
+    public void Archive_DoesNotCacheMissingRootIndex()
+    {
+        using var archive = new TempArchive();
+        archive.AddObject("alice/p/tile/A", Encoding.UTF8.GetBytes("a"));
+
+        var rootIndexPath = Path.Combine(archive.ArchiveRoot, "_index.json");
+        var rootIndexBytes = File.ReadAllBytes(rootIndexPath);
+        File.Delete(rootIndexPath);
+
+        var store = NewStore(archive);
+        Assert.DoesNotContain("alice", store.ListUsers());
+
+        File.WriteAllBytes(rootIndexPath, rootIndexBytes);
+
+        Assert.Contains("alice", store.ListUsers());
+    }
+
+    [Fact]
+    public async Task Archive_DoesNotCacheMissingNestedIndex()
+    {
+        using var archive = new TempArchive();
+        archive.AddObject("alice/p/tile/A", Encoding.UTF8.GetBytes("a"), "image/png");
+
+        var leafIndexPath = Path.Combine(archive.ArchiveRoot, "alice", "p", "tile", "_index.json");
+        var leafIndexBytes = File.ReadAllBytes(leafIndexPath);
+        File.Delete(leafIndexPath);
+
+        var store = NewStore(archive);
+        Assert.Null(await store.GetAsync("alice/p/tile/A"));
+
+        File.WriteAllBytes(leafIndexPath, leafIndexBytes);
+
+        var obj = await store.GetAsync("alice/p/tile/A");
+        Assert.NotNull(obj);
+        Assert.Equal("a", Encoding.UTF8.GetString(await obj!.ReadBytesAsync()));
+    }
+
     private static IPieceStore NewStore(TempArchive archive)
         => new OverlayPieceStore(
             new ArchivePieceStore(archive.ArchiveRoot, new MemoryCache(new MemoryCacheOptions())),
