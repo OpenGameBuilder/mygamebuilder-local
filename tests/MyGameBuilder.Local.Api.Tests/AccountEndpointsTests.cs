@@ -1,6 +1,9 @@
 using System.Net;
 using System.Text;
 using System.Xml.Linq;
+using Microsoft.Extensions.Caching.Memory;
+using MyGameBuilder.Local.Api.Accounts;
+using MyGameBuilder.Local.Api.Pieces;
 
 namespace MyGameBuilder.Local.Api.Tests;
 
@@ -11,6 +14,23 @@ namespace MyGameBuilder.Local.Api.Tests;
 /// </summary>
 public sealed class AccountEndpointsTests
 {
+    [Fact]
+    public void AccountStore_ExistingAccount_SucceedsWithAnyPassword()
+    {
+        using var archive = new TempArchive();
+        using var pieces = new MemoryCache(new MemoryCacheOptions());
+        var store = new AccountStore(new OverlayPieceStore(
+            new ArchivePieceStore(archive.ArchiveRoot, pieces),
+            new DataPieceStore(archive.DataRoot)));
+        Assert.True(store.TryCreate(new Account { Login = "alice", Password = "secret" }));
+
+        var result = store.Login("alice", string.Empty);
+
+        Assert.True(result.Success);
+        Assert.Equal("alice", result.Login);
+        Assert.Equal(1, result.LoginCount);
+    }
+
     [Fact]
     public async Task Healthz_ReturnsOk_WhenNoLaunchToken()
     {
@@ -42,18 +62,32 @@ public sealed class AccountEndpointsTests
     }
 
     [Fact]
-    public async Task FlexLogin_SeededAccount_Succeeds()
+    public async Task FlexLogin_GuestFallback_SucceedsWithAnyPassword()
     {
         using var archive = new TempArchive();
         using var factory = new BackendFactory(archive);
         using var client = factory.CreateClient();
 
         var fragment = await PostFormFragmentAsync(client, "/user/flexlogin",
-            new() { ["login"] = "foo", ["password"] = "bar" });
+            new() { ["login"] = "guest", ["password"] = "anything" });
 
         Assert.Equal("1", fragment.Element("status")!.Value);
-        Assert.Equal("Welcome back, foo!", fragment.Element("message")!.Value);
+        Assert.Equal("Welcome back, guest!", fragment.Element("message")!.Value);
         Assert.Equal("1", fragment.Element("logincount")!.Value);
+    }
+
+    [Fact]
+    public async Task FlexLogin_BlankLogin_UsesGuestFallback()
+    {
+        using var archive = new TempArchive();
+        using var factory = new BackendFactory(archive);
+        using var client = factory.CreateClient();
+
+        var fragment = await PostFormFragmentAsync(client, "/user/flexlogin",
+            new() { ["login"] = string.Empty, ["password"] = string.Empty });
+
+        Assert.Equal("1", fragment.Element("status")!.Value);
+        Assert.Equal("Welcome back, guest!", fragment.Element("message")!.Value);
     }
 
     [Fact]
@@ -67,8 +101,8 @@ public sealed class AccountEndpointsTests
         {
             Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["login"] = "foo",
-                ["password"] = "bar",
+                ["login"] = "guest",
+                ["password"] = string.Empty,
             }),
         };
         request.Headers.Add("Origin", "http://localhost:8080");
@@ -101,14 +135,30 @@ public sealed class AccountEndpointsTests
     }
 
     [Fact]
-    public async Task FlexLogin_WrongPassword_Fails()
+    public async Task FlexLogin_ExistingArchiveUser_SucceedsWithEmptyPassword()
+    {
+        using var archive = new TempArchive();
+        archive.AddObject("ghostuser/-/profile/user", Encoding.UTF8.GetBytes("profile"));
+
+        using var factory = new BackendFactory(archive);
+        using var client = factory.CreateClient();
+
+        var fragment = await PostFormFragmentAsync(client, "/user/flexlogin",
+            new() { ["login"] = "ghostuser", ["password"] = string.Empty });
+
+        Assert.Equal("1", fragment.Element("status")!.Value);
+        Assert.Equal("Welcome back, ghostuser!", fragment.Element("message")!.Value);
+    }
+
+    [Fact]
+    public async Task FlexLogin_UnknownUser_Fails()
     {
         using var archive = new TempArchive();
         using var factory = new BackendFactory(archive);
         using var client = factory.CreateClient();
 
         var fragment = await PostFormFragmentAsync(client, "/user/flexlogin",
-            new() { ["login"] = "foo", ["password"] = "wrong" });
+            new() { ["login"] = "newbie", ["password"] = "anything" });
 
         Assert.Equal("0", fragment.Element("status")!.Value);
         Assert.Equal("Invalid username or password", fragment.Element("message")!.Value);
@@ -204,8 +254,10 @@ public sealed class AccountEndpointsTests
         var logins = fragment.Element("users")!.Elements("user")
             .Select(u => u.Element("login")!.Value)
             .ToList();
-        Assert.Contains("foo", logins);
+        Assert.Contains("guest", logins);
+        Assert.Contains("!system", logins);
         Assert.Contains("carol", logins);
+        Assert.DoesNotContain("foo", logins);
     }
 
     [Fact]

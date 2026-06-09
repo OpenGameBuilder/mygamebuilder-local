@@ -15,7 +15,7 @@ public sealed class GameStatStore
     /// <summary>Gets the row for (user, game), creating a zeroed row stamped with recency if missing.</summary>
     public GameStat GetOrCreate(string user, string game)
     {
-        user = Normalize(user, "foo");
+        user = Normalize(user, "guest");
         game ??= string.Empty;
 
         return _stats.GetOrAdd((user, game), key => new GameStat
@@ -29,7 +29,7 @@ public sealed class GameStatStore
     /// <summary>Removes the row then re-creates it zeroed (README flex_delete_gamestatus_if_exists).</summary>
     public GameStat Reset(string user, string game)
     {
-        user = Normalize(user, "foo");
+        user = Normalize(user, "guest");
         game ??= string.Empty;
         _stats.TryRemove((user, game), out _);
         return GetOrCreate(user, game);

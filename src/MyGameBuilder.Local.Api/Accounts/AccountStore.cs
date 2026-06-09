@@ -5,11 +5,10 @@ namespace MyGameBuilder.Local.Api.Accounts;
 
 /// <summary>
 /// In-memory accounts/stats DB emulation. The real archive does not include the
-/// legacy relational DB, so this store is seeded with the three documented default
-/// accounts and grows only via archive-driven login (auto-creating empty-password
-/// rows for users that exist in the piece store). Interactive sign-up is disabled
-/// at the endpoint layer per project scope; <see cref="TryCreate"/> still exists for
-/// completeness and tests.
+/// legacy relational DB, so this store starts empty and grows via archive-driven
+/// login (auto-creating rows for users that exist in the piece store). Interactive
+/// sign-up is disabled at the endpoint layer per project scope; <see cref="TryCreate"/>
+/// still exists for completeness and tests.
 /// </summary>
 public sealed class AccountStore
 {
@@ -20,47 +19,33 @@ public sealed class AccountStore
     {
         ArgumentNullException.ThrowIfNull(pieces);
         _pieces = pieces;
-        SeedDefaults();
     }
 
     /// <summary>
-    /// Authenticates per README 4: empty login becomes guest/guest; archive ghosts
-    /// (empty stored password + existing archive user) bypass the password; unknown
-    /// logins that exist in the archive auto-create an empty-password row.
+    /// Authenticates per README 4: empty login becomes guest; existing users bypass
+    /// the password; unknown logins that exist in the piece store auto-create a row.
     /// </summary>
     public LoginResult Login(string login, string password)
     {
         login = (login ?? string.Empty).Trim();
-        password = (password ?? string.Empty).Trim();
 
         if (login.Length == 0)
         {
             login = "guest";
-            password = "guest";
         }
 
-        var archived = _pieces.UserExists(login);
-
-        if (_accounts.TryGetValue(login, out var account))
+        if (!_accounts.TryGetValue(login, out var account))
         {
-            var ghost = account.Password.Length == 0 && archived;
-            if (!ghost && !string.Equals(account.Password, password, StringComparison.Ordinal))
+            if (!_pieces.UserExists(login))
             {
                 return new LoginResult(false, login, 0);
             }
 
-            account.LoginCount++;
-            return new LoginResult(true, account.Login, account.LoginCount);
+            account = _accounts.GetOrAdd(login, static key => new Account { Login = key, Password = string.Empty });
         }
 
-        if (archived)
-        {
-            var created = new Account { Login = login, Password = string.Empty, LoginCount = 1 };
-            _accounts[login] = created;
-            return new LoginResult(true, login, 1);
-        }
-
-        return new LoginResult(false, login, 0);
+        account.LoginCount++;
+        return new LoginResult(true, account.Login, account.LoginCount);
     }
 
     /// <summary>Looks up an account by login (case-insensitive). Null when absent.</summary>
@@ -111,12 +96,5 @@ public sealed class AccountStore
             .ThenBy(entry => entry.Login, StringComparer.Ordinal)
             .Take(cap)
             .ToList();
-    }
-
-    private void SeedDefaults()
-    {
-        _accounts["foo"] = new Account { Login = "foo", Password = "bar", LoginCount = 0 };
-        _accounts["guest"] = new Account { Login = "guest", Password = "guest", LoginCount = 0 };
-        _accounts["!system"] = new Account { Login = "!system", Password = "system", LoginCount = 0 };
     }
 }

@@ -28,6 +28,19 @@ public sealed class GameStatsEndpointsTests
     }
 
     [Fact]
+    public async Task GetGameStats_WhenUsernameMissing_UsesGuest()
+    {
+        using var archive = new TempArchive();
+        using var factory = new BackendFactory(archive);
+        using var client = factory.CreateClient();
+
+        var fragment = await PostFormFragmentAsync(client, "/user/flex_get_game_stats",
+            new() { ["gamename"] = "Pong" });
+
+        Assert.Equal("guest", fragment.Element("gamestat")!.Element("user")!.Value);
+    }
+
+    [Fact]
     public async Task BumpPlayCounter_AddsToPlays()
     {
         using var archive = new TempArchive();

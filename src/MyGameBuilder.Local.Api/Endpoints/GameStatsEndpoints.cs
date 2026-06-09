@@ -42,7 +42,7 @@ public static class GameStatsEndpoints
     private static async Task<IResult> BumpPlayCounterAsync(HttpRequest request, GameStatStore store)
     {
         var fields = await RequestFields.ReadAsync(request).ConfigureAwait(false);
-        var stat = store.GetOrCreate(fields.FormOrQuery("username", "foo"), fields.FormOrQuery("gamename"));
+        var stat = store.GetOrCreate(fields.FormOrQuery("username", "guest"), fields.FormOrQuery("gamename"));
 
         var plays = ParseInt(fields.FormOrQuery("bumpplayscount"), 0);
         var completions = ParseInt(fields.FormOrQuery("bumpcompletionscount"), 0);
@@ -59,7 +59,7 @@ public static class GameStatsEndpoints
     private static async Task<IResult> UpdateMetadataAsync(HttpRequest request, GameStatStore store)
     {
         var fields = await RequestFields.ReadAsync(request).ConfigureAwait(false);
-        var stat = store.GetOrCreate(fields.FormOrQuery("username", "foo"), fields.FormOrQuery("gamename"));
+        var stat = store.GetOrCreate(fields.FormOrQuery("username", "guest"), fields.FormOrQuery("gamename"));
 
         stat.GameStatus = ParseInt(fields.FormOrQuery("gamestatus"), stat.GameStatus);
         stat.GameType = ParseInt(fields.FormOrQuery("gametype"), stat.GameType);
@@ -80,7 +80,7 @@ public static class GameStatsEndpoints
     private static async Task<IResult> RecordRatingAsync(HttpRequest request, GameStatStore store)
     {
         var fields = await RequestFields.ReadAsync(request).ConfigureAwait(false);
-        var user = fields.FormOrQuery("username", "foo");
+        var user = fields.FormOrQuery("username", "guest");
         var game = fields.FormOrQuery("gamename");
         var stat = store.GetOrCreate(user, game);
 
@@ -114,7 +114,7 @@ public static class GameStatsEndpoints
     private static async Task<IResult> GetRatingsAsync(HttpRequest request, GameStatStore store)
     {
         var fields = await RequestFields.ReadAsync(request).ConfigureAwait(false);
-        var user = fields.FormOrQuery("username", "foo");
+        var user = fields.FormOrQuery("username", "guest");
         var game = fields.FormOrQuery("gamename");
         var raterName = fields.FormOrQuery("ratername");
         var stat = store.GetOrCreate(user, game);
@@ -198,7 +198,7 @@ public static class GameStatsEndpoints
     private static async Task<(string User, string Game)> ReadKeyAsync(HttpRequest request)
     {
         var fields = await RequestFields.ReadAsync(request).ConfigureAwait(false);
-        return (fields.FormOrQuery("username", "foo"), fields.FormOrQuery("gamename"));
+        return (fields.FormOrQuery("username", "guest"), fields.FormOrQuery("gamename"));
     }
 
     private static int ParseInt(string value, int fallback)

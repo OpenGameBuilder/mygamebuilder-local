@@ -12,8 +12,8 @@ namespace MyGameBuilder.Local.Api.Endpoints;
 /// <summary>
 /// Auth, account, and per-user endpoints returning Flex "object" fragments
 /// (concatenated sibling elements, no root, <c>text/xml</c>) per README 4. New-account
-/// registration is intentionally disabled for this build; the archive-driven login
-/// path (which auto-creates empty-password rows for archived users) remains active.
+/// registration is intentionally disabled for this build; login accepts any password
+/// for users that already exist in the account or piece stores.
 /// </summary>
 public static class AccountEndpoints
 {

@@ -94,7 +94,7 @@ public static class FrontendEndpoints
           <h1>MyGameBuilder Local</h1>
           <p>Local backend and Flash front-end for the legacy MyGameBuilder client.</p>
           <p><a class="cta" href="__PLAY_URL__">Launch MyGameBuilder (Ruffle)</a></p>
-          <p>Seeded accounts: <code>foo</code> / <code>bar</code>, <code>guest</code> / <code>guest</code>.</p>
+          <p>Use any existing archive user with any password, or log in as <code>guest</code>.</p>
           <p>The Flash client (<code>__SWF_NAME__</code>) is served from the configured front-end directory under <code>/apphost</code>.</p>
         </main>
         </body>
