@@ -1,0 +1,6 @@
+{
+  "prefix": "guest/-/profile",
+  "entries": {
+    "guest/-/profile/user": "user"
+  }
+}

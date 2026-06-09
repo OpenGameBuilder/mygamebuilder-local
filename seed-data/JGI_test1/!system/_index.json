@@ -1,0 +1,7 @@
+{
+  "prefix": "!system",
+  "entries": {
+    "!system/-/": "-",
+    "!system/badges/": "badges"
+  }
+}

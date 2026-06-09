@@ -1,0 +1,16 @@
+{
+  "key": "foo/-/profile/user",
+  "size": 1190,
+  "content_type": "text/plain",
+  "etag": "819dca89cce4724db959c1f6845feb7d",
+  "last_modified": "Tue, 11 Jul 2017 22:20:02 GMT",
+  "amz_meta": {
+    "width": "0",
+    "tilename": "null",
+    "content-type": "text/plain",
+    "height": "0",
+    "acl": "",
+    "comment": "null",
+    "blobencoding": "0"
+  }
+}
