@@ -27,12 +27,4 @@
     <None Remove="archive\**;data\**;frontend\**" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="..\..\seed-data\**\*">
-      <Link>seed-data\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-  </ItemGroup>
-
 </Project>

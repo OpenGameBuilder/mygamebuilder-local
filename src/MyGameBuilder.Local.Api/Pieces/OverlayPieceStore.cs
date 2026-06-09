@@ -30,8 +30,13 @@ public sealed class OverlayPieceStore : IPieceStore
             return ValueTask.FromResult<PieceObject?>(ToObject(overlay));
         }
 
-        return _archive.TryGet(key, out var baseEntry)
-            ? ValueTask.FromResult<PieceObject?>(ToObject(baseEntry))
+        if (_archive.TryGet(key, out var baseEntry))
+        {
+            return ValueTask.FromResult<PieceObject?>(ToObject(baseEntry));
+        }
+
+        return DefaultProfilePieces.TryGet(key, out var fallback)
+            ? ValueTask.FromResult(fallback)
             : ValueTask.FromResult<PieceObject?>(null);
     }
 
@@ -75,6 +80,14 @@ public sealed class OverlayPieceStore : IPieceStore
             }
         }
 
+        foreach (var item in DefaultProfilePieces.List(prefix))
+        {
+            if (!_data.IsTombstoned(item.Key))
+            {
+                effective.TryAdd(item.Key, item);
+            }
+        }
+
         return effective.Values.ToList();
     }
 
@@ -93,6 +106,12 @@ public sealed class OverlayPieceStore : IPieceStore
             {
                 return true;
             }
+        }
+
+        if (string.Equals(user, "!system", StringComparison.Ordinal) ||
+            string.Equals(user, "guest", StringComparison.Ordinal))
+        {
+            return true;
         }
 
         // Index-only check: no archive content is read for the existence test.
@@ -118,6 +137,9 @@ public sealed class OverlayPieceStore : IPieceStore
                 users.Add(user);
             }
         }
+
+        users.Add("!system");
+        users.Add("guest");
 
         return users;
     }

@@ -1,4 +1,5 @@
 using System.Text;
+using System.IO.Compression;
 using Microsoft.Extensions.Caching.Memory;
 using MyGameBuilder.Local.Api.Pieces;
 
@@ -36,6 +37,46 @@ public sealed class PieceStoreTests
 
         var obj = await store.GetAsync("alice/p/tile/Brick");
         Assert.Equal("new", Encoding.UTF8.GetString(await obj!.ReadBytesAsync()));
+    }
+
+    [Fact]
+    public async Task DefaultProfileFallback_ReturnsVirtualGuestAndSystemProfiles()
+    {
+        using var archive = new TempArchive();
+        var store = NewStore(archive);
+
+        var guest = await store.GetAsync("guest/-/profile/user");
+        var system = await store.GetAsync("!system/-/profile/user");
+
+        Assert.NotNull(guest);
+        Assert.NotNull(system);
+        Assert.Equal("text/plain", guest!.ContentType);
+        Assert.Contains("Default local profile for guest.", DecodeWriteUtfZlib(await guest.ReadBytesAsync()));
+        Assert.Contains("Default local profile for !system.", DecodeWriteUtfZlib(await system!.ReadBytesAsync()));
+        Assert.False(Directory.Exists(Path.Combine(archive.DataRoot, "objects")));
+    }
+
+    [Fact]
+    public async Task Overlay_Put_WinsOverDefaultProfileFallback()
+    {
+        using var archive = new TempArchive();
+        var store = NewStore(archive);
+        await store.PutAsync("guest/-/profile/user", Encoding.UTF8.GetBytes("real profile"), "text/plain", [], default);
+
+        var obj = await store.GetAsync("guest/-/profile/user");
+
+        Assert.Equal("real profile", Encoding.UTF8.GetString(await obj!.ReadBytesAsync()));
+    }
+
+    [Fact]
+    public void List_ByPrefix_IncludesDefaultProfileFallback()
+    {
+        using var archive = new TempArchive();
+        var store = NewStore(archive);
+
+        var keys = store.List("guest/-/profile/").Select(item => item.Key).ToList();
+
+        Assert.Equal(["guest/-/profile/user"], keys);
     }
 
     [Fact]
@@ -169,4 +210,18 @@ public sealed class PieceStoreTests
         => new OverlayPieceStore(
             new ArchivePieceStore(archive.ArchiveRoot, new MemoryCache(new MemoryCacheOptions())),
             new DataPieceStore(archive.DataRoot));
+
+    private static string DecodeWriteUtfZlib(byte[] body)
+    {
+        using var input = new MemoryStream(body);
+        using var zlib = new ZLibStream(input, CompressionMode.Decompress);
+        using var output = new MemoryStream();
+        zlib.CopyTo(output);
+
+        var payload = output.ToArray();
+        Assert.True(payload.Length >= 2);
+        var length = (payload[0] << 8) | payload[1];
+        Assert.Equal(length, payload.Length - 2);
+        return Encoding.UTF8.GetString(payload, 2, length);
+    }
 }

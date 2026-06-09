@@ -1,1 +1,0 @@
-This tutorial will teach you how to print your maps.||(nextButton)|#First go to map maker.||(nextButton)|#Your map making level has increased, you can now use print.||(nextButton)|#Load a map.||(nextButton)|#Push play, and when you get it how you like it, push print.||(nextButton)|#If you have a printer connected, it should print.||(nextButton)|#Done!||(nextButton)|

@@ -1,1 +1,0 @@
-This will teach you about project logos.||(nextButton)|#A project logo is the logo you see next to your project name according to which project you are in.||(nextButton)|#Lets make one! Open tile maker and draw your project logo. It can be something simple for now...||(nextButton)|#Save it as "project.logo" No capitals.||tilemaker_save_complete|#Done!||(nextButton)|

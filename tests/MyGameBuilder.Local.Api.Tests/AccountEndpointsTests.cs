@@ -25,6 +25,23 @@ public sealed class AccountEndpointsTests
     }
 
     [Fact]
+    public async Task Startup_CreatesWritableDataDirectory()
+    {
+        using var archive = new TempArchive();
+        Directory.Delete(archive.DataRoot, recursive: true);
+
+        using var factory = new BackendFactory(archive);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/healthz");
+
+        response.EnsureSuccessStatusCode();
+        Assert.True(Directory.Exists(archive.DataRoot));
+        Assert.False(Directory.Exists(Path.Combine(archive.DataRoot, "objects")));
+        Assert.False(Directory.Exists(Path.Combine(archive.DataRoot, "tombstones")));
+    }
+
+    [Fact]
     public async Task FlexLogin_SeededAccount_Succeeds()
     {
         using var archive = new TempArchive();

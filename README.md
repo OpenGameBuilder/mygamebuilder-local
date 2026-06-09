@@ -11,8 +11,8 @@ The project is part of the OpenGameBuilder preservation effort, but this repo is
 - ASP.NET Core minimal API backend.
 - Wire-compatible XML fragment and SOAP-style endpoints used by the legacy client.
 - Archive/data overlay storage for MyGameBuilder pieces.
-- Seed content under [`seed-data/JGI_test1`](seed-data/JGI_test1).
-- xUnit coverage for account, piece store, SOAP, seed data, and game-stat behavior.
+- Built-in fallback profiles for the special `guest` and `!system` accounts.
+- xUnit coverage for account, piece store, SOAP, fallback profile, and game-stat behavior.
 - Visual Studio and VS Code development setup.
 
 ## Getting Started

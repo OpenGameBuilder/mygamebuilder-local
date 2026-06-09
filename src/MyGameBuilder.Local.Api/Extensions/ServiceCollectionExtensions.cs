@@ -66,7 +66,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPieceStore>(provider =>
             new OverlayPieceStore(provider.GetRequiredService<ArchivePieceStore>(), provider.GetRequiredService<DataPieceStore>()));
 
-        services.AddHostedService<PieceStoreSeeder>();
+        services.AddHostedService<PieceStoreInitializer>();
         services.AddSingleton<AccountStore>();
         services.AddSingleton<GameStatStore>();
         services.AddSingleton<SoapOperationHandler>();

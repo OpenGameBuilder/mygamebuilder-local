@@ -49,9 +49,8 @@ Useful tasks are available from **Terminal: Run Task**:
 
 The default configuration uses:
 
-- `seed-data/JGI_test1` as the initial read-only content seed.
 - `archive` for imported archive content.
 - `data` for writable local overlay data.
+- hard-coded in-memory fallback profiles for the special `guest` and `!system` accounts when no archive/data profile exists.
 
-See [`REQUIREMENTS.md`](REQUIREMENTS.md) for endpoint compatibility requirements and [`FORMATS.md`](FORMATS.md) for the archived piece formats.
-
+The app creates `data/` on startup if it is missing. Overlay objects and tombstones are created inside it only after the client writes or deletes pieces.

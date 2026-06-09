@@ -20,6 +20,7 @@ public sealed class DataPieceStore
 
     private static readonly JsonSerializerOptions s_jsonOptions = new() { WriteIndented = false };
 
+    private readonly string _dataRoot;
     private readonly string _objectsDir;
     private readonly string _tombstonesDir;
     private readonly Lock _gate = new();
@@ -29,8 +30,10 @@ public sealed class DataPieceStore
     public DataPieceStore(string dataRoot)
     {
         ArgumentException.ThrowIfNullOrEmpty(dataRoot);
+        _dataRoot = dataRoot;
         _objectsDir = Path.Combine(dataRoot, "objects");
         _tombstonesDir = Path.Combine(dataRoot, "tombstones");
+        Directory.CreateDirectory(_dataRoot);
         Load();
     }
 
@@ -122,18 +125,6 @@ public sealed class DataPieceStore
         lock (_gate)
         {
             return _entries.Values.ToList();
-        }
-    }
-
-    /// <summary>True once the overlay contains any object or tombstone state.</summary>
-    internal bool HasAnyState
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _entries.Count > 0 || _tombstones.Count > 0;
-            }
         }
     }
 
