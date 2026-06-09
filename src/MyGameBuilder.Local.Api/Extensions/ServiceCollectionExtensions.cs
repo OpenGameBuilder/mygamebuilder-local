@@ -26,6 +26,14 @@ public static class ServiceCollectionExtensions
         services.Configure<ServerOptions>(configuration.GetSection(ServerOptions.SectionName));
         services.Configure<FrontendOptions>(configuration.GetSection(FrontendOptions.SectionName));
 
+        services.AddCors(options =>
+        {
+            options.AddDefaultPolicy(policy => policy
+                .AllowAnyOrigin()
+                .AllowAnyHeader()
+                .AllowAnyMethod());
+        });
+
         // The launch token is sourced from the environment so a launcher can confirm
         // it reached this specific instance via /healthz. PostConfigure runs after
         // the config-bound values so it takes precedence when set.
@@ -58,6 +66,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPieceStore>(provider =>
             new OverlayPieceStore(provider.GetRequiredService<ArchivePieceStore>(), provider.GetRequiredService<DataPieceStore>()));
 
+        services.AddHostedService<PieceStoreSeeder>();
         services.AddSingleton<AccountStore>();
         services.AddSingleton<GameStatStore>();
         services.AddSingleton<SoapOperationHandler>();

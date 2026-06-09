@@ -125,6 +125,18 @@ public sealed class DataPieceStore
         }
     }
 
+    /// <summary>True once the overlay contains any object or tombstone state.</summary>
+    internal bool HasAnyState
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _entries.Count > 0 || _tombstones.Count > 0;
+            }
+        }
+    }
+
     private void Load()
     {
         if (Directory.Exists(_objectsDir))

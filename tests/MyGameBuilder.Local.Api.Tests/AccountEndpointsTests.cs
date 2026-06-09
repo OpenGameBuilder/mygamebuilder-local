@@ -40,6 +40,50 @@ public sealed class AccountEndpointsTests
     }
 
     [Fact]
+    public async Task FlexLogin_WithOrigin_ReturnsCorsHeader()
+    {
+        using var archive = new TempArchive();
+        using var factory = new BackendFactory(archive);
+        using var client = factory.CreateClient();
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/user/flexlogin")
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["login"] = "foo",
+                ["password"] = "bar",
+            }),
+        };
+        request.Headers.Add("Origin", "http://localhost:8080");
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Origin", out var values));
+        Assert.Equal("*", values.Single());
+    }
+
+    [Fact]
+    public async Task Heartbeat_Preflight_ReturnsCorsHeaders()
+    {
+        using var archive = new TempArchive();
+        using var factory = new BackendFactory(archive);
+        using var client = factory.CreateClient();
+
+        using var request = new HttpRequestMessage(HttpMethod.Options, "/user/flex_heartbeat_safe");
+        request.Headers.Add("Origin", "http://localhost:8080");
+        request.Headers.Add("Access-Control-Request-Method", "POST");
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origins));
+        Assert.Equal("*", origins.Single());
+        Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Methods", out var methods));
+        Assert.Contains("POST", methods.Single());
+    }
+
+    [Fact]
     public async Task FlexLogin_WrongPassword_Fails()
     {
         using var archive = new TempArchive();

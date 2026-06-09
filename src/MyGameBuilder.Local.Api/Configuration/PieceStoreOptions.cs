@@ -23,6 +23,19 @@ public sealed class PieceStoreOptions
     public string DataRoot { get; set; } = "data";
 
     /// <summary>
+    /// Bundled, archive-format seed data root. On first run, when the writable
+    /// overlay has no objects or tombstones, sidecar-backed objects from this
+    /// directory are imported into <see cref="DataRoot"/> using the overlay format.
+    /// Relative paths resolve against the content root. May be absent.
+    /// </summary>
+    public string SeedRoot { get; set; } = "seed-data/JGI_test1";
+
+    /// <summary>
+    /// Enables first-run import from <see cref="SeedRoot"/> into the writable overlay.
+    /// </summary>
+    public bool SeedOnFirstRun { get; set; } = true;
+
+    /// <summary>
     /// Upper bound on the archive store's in-memory cache size (sum of cached entry
     /// sizes: parsed index entry counts and resolved listing counts). Bounds memory for
     /// very large archives while keeping repeat lookups for active users fast.

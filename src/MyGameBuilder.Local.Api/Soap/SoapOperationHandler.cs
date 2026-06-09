@@ -16,11 +16,14 @@ public sealed class SoapOperationHandler
     private const string DefaultBucket = "JGI_test1";
 
     private readonly IPieceStore _pieces;
+    private readonly ILogger<SoapOperationHandler> _logger;
 
-    public SoapOperationHandler(IPieceStore pieces)
+    public SoapOperationHandler(IPieceStore pieces, ILogger<SoapOperationHandler> logger)
     {
         ArgumentNullException.ThrowIfNull(pieces);
+        ArgumentNullException.ThrowIfNull(logger);
         _pieces = pieces;
+        _logger = logger;
     }
 
     /// <summary>Dispatches a parsed request to the matching operation by local name.</summary>
@@ -50,6 +53,7 @@ public sealed class SoapOperationHandler
         }
         catch (FormatException)
         {
+            _logger.LogWarning("SOAP PutObjectInline received invalid base64 for key {Key}; storing an empty body.", key);
             body = Array.Empty<byte>();
         }
 
@@ -62,8 +66,11 @@ public sealed class SoapOperationHandler
         }
         catch (IOException exc)
         {
+            _logger.LogError(exc, "SOAP PutObjectInline failed while writing key {Key}.", key);
             return SoapResult.FaultEnvelope(SoapEnvelope.Fault($"Archive write failed: {exc.Message}"), StatusCodes.Status500InternalServerError);
         }
+
+        _logger.LogInformation("SOAP PutObjectInline stored key {Key} ({ByteCount} bytes, content type {ContentType}).", key, body.LongLength, contentType);
 
         var bodyXml = $"""
                 <ns1:PutObjectInlineResponse xmlns:ns1="{SoapEnvelope.AwsNamespace}">
@@ -82,11 +89,13 @@ public sealed class SoapOperationHandler
         var obj = await _pieces.GetAsync(key, cancellationToken).ConfigureAwait(false);
         if (obj is null)
         {
+            _logger.LogWarning("SOAP GetObject returned 404 for missing key {Key}.", key);
             var fault = SoapEnvelope.Fault("The specified key does not exist", "Client.NoSuchKey");
             return SoapResult.FaultEnvelope(fault, StatusCodes.Status404NotFound);
         }
 
         var bytes = await obj.ReadBytesAsync(cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("SOAP GetObject resolved key {Key} ({ByteCount} bytes, content type {ContentType}).", key, bytes.LongLength, obj.ContentType);
         var dataBase64 = Convert.ToBase64String(bytes);
 
         // Echo every stored metadata pair, then add Content-Type if known and not already present.
@@ -125,6 +134,14 @@ public sealed class SoapOperationHandler
         var maxKeys = ParseInt(request.Param("MaxKeys"), 1000);
 
         var items = _pieces.List(prefix);
+        _logger.LogInformation(
+            "SOAP ListBucket for bucket {Bucket}, prefix {Prefix}, marker {Marker}, delimiter {Delimiter}, max keys {MaxKeys} found {ItemCount} effective objects.",
+            bucket,
+            prefix,
+            marker,
+            delimiter,
+            maxKeys,
+            items.Count);
         var byKey = items.ToDictionary(item => item.Key, item => item, StringComparer.Ordinal);
 
         var keys = byKey.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
@@ -196,6 +213,7 @@ public sealed class SoapOperationHandler
         var key = request.Param("Key");
         var removed = await _pieces.DeleteAsync(key, cancellationToken).ConfigureAwait(false);
         var code = removed ? 204 : 404;
+        _logger.LogInformation("SOAP DeleteObject for key {Key} returned code {Code}.", key, code);
 
         var bodyXml = $"""
                 <ns1:DeleteObjectResponse xmlns:ns1="{SoapEnvelope.AwsNamespace}">

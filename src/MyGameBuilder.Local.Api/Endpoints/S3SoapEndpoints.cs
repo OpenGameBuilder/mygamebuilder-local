@@ -24,7 +24,11 @@ public static class S3SoapEndpoints
         return app;
     }
 
-    private static async Task<IResult> HandleAsync(HttpRequest request, SoapOperationHandler handler, CancellationToken cancellationToken)
+    private static async Task<IResult> HandleAsync(
+        HttpRequest request,
+        SoapOperationHandler handler,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
     {
         string xml;
         using (var reader = new StreamReader(request.Body))
@@ -35,6 +39,8 @@ public static class S3SoapEndpoints
         var parsed = SoapRequest.TryParse(xml);
         if (parsed is null)
         {
+            loggerFactory.CreateLogger("MyGameBuilder.Local.Api.Soap.Endpoint")
+                .LogWarning("SOAP request could not be parsed at {Path}; request length was {Length} characters.", request.Path, xml.Length);
             return XmlResults.Xml(SoapEnvelope.Fault("Invalid request"));
         }
 

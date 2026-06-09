@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -22,6 +22,14 @@
     <Content Remove="archive\**;data\**;frontend\**" />
     <EmbeddedResource Remove="archive\**;data\**;frontend\**" />
     <None Remove="archive\**;data\**;frontend\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\seed-data\**\*">
+      <Link>seed-data\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

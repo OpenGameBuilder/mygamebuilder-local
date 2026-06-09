@@ -68,9 +68,19 @@ public static class AccountEndpoints
         return XmlResults.Xml($"<status>1</status><usedKB>{usedKb}</usedKB><maxKB>{options.Value.MaxQuotaKb}</maxKB>");
     }
 
-    private static IResult BrowseUsers(AccountStore accounts)
+    private static IResult BrowseUsers(AccountStore accounts, ILoggerFactory loggerFactory)
     {
         var users = accounts.Browse();
+        const int previewLimit = 20;
+        var preview = string.Join(", ", users.Take(previewLimit).Select(user => user.Login));
+        if (users.Count > previewLimit)
+        {
+            preview += $", ... +{users.Count - previewLimit} more";
+        }
+
+        loggerFactory.CreateLogger("MyGameBuilder.Local.Api.Accounts.BrowseUsers")
+            .LogInformation("Browse users returned {UserCount} users. Preview: {Users}", users.Count, preview);
+
         if (users.Count == 0)
         {
             return XmlResults.Xml("<status>1</status><users></users>");

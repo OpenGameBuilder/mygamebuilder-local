@@ -18,6 +18,10 @@ var app = builder.Build();
 // Serve the Flash client bundle (and any assets it requests) under /apphost.
 app.UseFrontend();
 
+// The legacy client may be hosted as localhost, 127.0.0.1, or via Ruffle from a
+// static/file-like origin. Keep local API responses readable across those origins.
+app.UseCors();
+
 app.MapHealthEndpoints();
 app.MapFrontendEndpoints();
 app.MapAccountEndpoints();
