@@ -1,0 +1,163 @@
+name: CD / Release
+
+# Dispatch this workflow from main so the latest workflow file is used.
+# For a standard release, leave `ref` as main. For a patch release, set `ref`
+# to `patch/vX.Y.Z`. The workflow checks out `ref`, validates the version in
+# Directory.Build.props, builds and tests, publishes release archives, creates
+# the immutable tag and GitHub Release, then opens follow-up housekeeping PRs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ref to release. Use `main` for standard releases or `patch/vX.Y.Z` for patch releases. Defaults to `main`."
+        required: false
+        type: string
+        default: main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: cd-release
+  cancel-in-progress: false
+
+env:
+  HUSKY: 0
+  PROJECT: src/MyGameBuilder.Local.Api/MyGameBuilder.Local.Api.csproj
+  SOLUTION: mygamebuilder-local.slnx
+
+jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+
+    outputs:
+      kind: ${{ steps.validate.outputs.kind }}
+      version: ${{ steps.validate.outputs.version }}
+      tag: ${{ steps.validate.outputs.tag }}
+      source_sha: ${{ steps.validate.outputs.source_sha }}
+      previous_tag: ${{ steps.validate.outputs.previous_tag }}
+      next_main_version: ${{ steps.validate.outputs.next_main_version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Validate
+        id: validate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REF: ${{ inputs.ref }}
+        run: bash ./scripts/validate-release.sh
+
+  release:
+    name: Build, package, tag, and release
+    needs: validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Restore
+        run: dotnet restore "${SOLUTION}"
+
+      - name: Build
+        run: dotnet build "${SOLUTION}" --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test "${SOLUTION}" --configuration Release --no-build
+
+      - name: Publish release archives
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p artifacts/dist
+
+          for rid in win-x64 linux-x64 osx-x64 osx-arm64; do
+            output="artifacts/publish/${rid}"
+            archive_name="mygamebuilder-local-${VERSION}-${rid}"
+
+            dotnet publish "${PROJECT}" \
+              --configuration Release \
+              --runtime "${rid}" \
+              --self-contained true \
+              --output "${output}" \
+              -p:PublishSingleFile=true \
+              -p:IncludeNativeLibrariesForSelfExtract=true \
+              -p:EnableCompressionInSingleFile=true \
+              -p:DebugType=none \
+              -p:DebugSymbols=false
+
+            if [ "${rid}" = "win-x64" ]; then
+              (cd "${output}" && zip -9 -r "../../dist/${archive_name}.zip" .)
+            else
+              tar -C "${output}" -czf "artifacts/dist/${archive_name}.tar.gz" .
+            fi
+          done
+
+          (cd artifacts/dist && sha256sum * | sort -k2 > SHA256SUMS.txt)
+
+      - name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          PREVIOUS_TAG: ${{ needs.validate.outputs.previous_tag }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            existing_sha="$(git rev-list -n 1 "${TAG}")"
+            if [ "${existing_sha}" != "${SOURCE_SHA}" ]; then
+              echo "Tag ${TAG} already exists at ${existing_sha}, expected ${SOURCE_SHA}." >&2
+              exit 1
+            fi
+            echo "Tag ${TAG} already exists at the expected SHA."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "${TAG}" "${SOURCE_SHA}" -m "Release ${TAG}"
+            git push origin "refs/tags/${TAG}"
+          fi
+
+          assets=(artifacts/dist/*)
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "GitHub Release ${TAG} already exists; uploading assets idempotently."
+            gh release upload "${TAG}" "${assets[@]}" --clobber
+          else
+            args=(release create "${TAG}" "${assets[@]}" --verify-tag --generate-notes --title "${TAG}")
+            if [ -n "${PREVIOUS_TAG}" ]; then
+              args+=(--notes-start-tag "${PREVIOUS_TAG}")
+            fi
+            gh "${args[@]}"
+          fi
+
+      - name: Open follow-up PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KIND: ${{ needs.validate.outputs.kind }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          NEXT_MAIN_VERSION: ${{ needs.validate.outputs.next_main_version }}
+        run: bash ./scripts/post-release.sh
+

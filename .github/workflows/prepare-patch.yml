@@ -1,0 +1,30 @@
+name: Prepare Patch
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-patch
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare patch PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Prepare patch PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ./scripts/prepare-patch.sh
+

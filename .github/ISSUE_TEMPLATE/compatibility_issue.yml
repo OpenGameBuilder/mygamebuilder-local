@@ -1,0 +1,91 @@
+name: Compatibility Issue
+description: Report behavior that differs from the original MyGameBuilder local server or legacy client expectations.
+labels: ["needs triage"]
+type: compatibility
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve MyGameBuilder compatibility.
+
+        Use this form for wire-compatibility issues, restored content issues, or cases where the local backend does not match expected legacy MyGameBuilder behavior.
+
+        Please do not include private information, security vulnerability details, sensitive material, archived game dumps, original proprietary assets, or decompiled source code.
+
+        Describe observed behavior, not decompiled implementation details.
+
+        NOTE: Most compatibility issues are likely rooted in Ruffle, in which case they will be considered out of scope for mygamebuilder-local and labeled `wontfix`. Nevertheless, please report them so we can document any differences.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have searched existing issues to avoid creating a duplicate.
+          required: true
+        - label: This report does not include private, sensitive, security-related, proprietary, or decompiled-source material.
+          required: true
+        - label: This report describes behavior, not copied or translated source code.
+          required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected MyGameBuilder behavior
+      description: Briefly describe the behavior the local backend should reproduce.
+      placeholder: In the original client/server flow, this appeared to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Current local backend behavior
+      description: What happens currently?
+      placeholder: In mygamebuilder-local, this currently...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What should someone do to see the issue?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      description: Best guess is fine.
+      multiple: true
+      options:
+        - SOAP/S3 list/get/put/delete
+        - Tile/actor/map maker
+        - Game player
+        - Account login or creation
+        - Profile/social features
+        - Profile/game data
+        - Not sure
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or reference
+      description: Add safe screenshots, video, notes, links, or examples that show the expected behavior.
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional context
+      description: Add any other context that may help.
+    validations:
+      required: false
+

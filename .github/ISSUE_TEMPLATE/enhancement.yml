@@ -1,0 +1,80 @@
+name: Enhancement
+description: Suggest an improvement to something that already exists.
+labels: ["needs triage"]
+type: enhancement
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement.
+
+        Use this form for improvements to existing behavior, developer experience, documentation, tooling, compatibility, or project workflow.
+
+        For entirely new capabilities, use the Feature Request form instead.
+
+        Please do not include private information, security vulnerability details, sensitive material, archived game dumps, original proprietary assets, or decompiled source code.
+
+        NOTE: Any changes to the frontend itself are likely out of scope for mygamebuilder-local, which only aims to host the original flash client and data. Please submit feature requests on the [opengamebuilder](https://github.com/OpenGameBuilder/opengamebuilder/issues) repository instead.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have searched existing issues to avoid creating a duplicate.
+          required: true
+        - label: This request does not include private, sensitive, security-related, proprietary, or decompiled-source material.
+          required: true
+        - label: This does not propose changes to the frontend Flash implementation, which is out of scope for mygamebuilder-local.
+          required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: What should be improved?
+      description: Briefly describe the existing behavior, workflow, documentation, or tooling you want to improve.
+    validations:
+      required: true
+
+  - type: textarea
+    id: improvement
+    attributes:
+      label: Suggested improvement
+      description: What change would make this better?
+    validations:
+      required: true
+
+  - type: textarea
+    id: benefit
+    attributes:
+      label: Why would this help?
+      description: Who benefits from this, and how?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      description: Best guess is fine.
+      multiple: true
+      options:
+        - Local backend behavior
+        - Developer experience
+        - Documentation
+        - CI/CD
+        - Project/community process
+        - Not sure
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples, sketches, or related ideas
+      description: Add examples, mockups, screenshots, links, or rough notes if useful.
+    validations:
+      required: false
+

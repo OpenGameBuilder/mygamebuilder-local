@@ -10,5 +10,19 @@
   },
   "[jsonc]": {
     "editor.defaultFormatter": "vscode.json-language-features"
-  }
+  },
+  "cSpell.words": [
+    "ASPNETCORE",
+    "blobencoding",
+    "dotnet",
+    "gamestat",
+    "JGI",
+    "mygamebuilder",
+    "piecetype",
+    "Ruffle",
+    "slnx",
+    "tilename",
+    "vsconfig",
+    "Xunit"
+  ]
 }

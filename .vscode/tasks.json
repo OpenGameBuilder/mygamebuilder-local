@@ -1,0 +1,80 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-api",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/MyGameBuilder.Local.Api/MyGameBuilder.Local.Api.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "build-all",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/mygamebuilder-local.slnx",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "clean",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "clean",
+        "${workspaceFolder}/mygamebuilder-local.slnx",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "test",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "test",
+        "${workspaceFolder}/mygamebuilder-local.slnx",
+        "--nologo"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "watch-api",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "watch",
+        "--project",
+        "${workspaceFolder}/src/MyGameBuilder.Local.Api/MyGameBuilder.Local.Api.csproj",
+        "run"
+      ],
+      "isBackground": true,
+      "problemMatcher": {
+        "base": "$msCompile",
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\s*Building\\.\\.\\.",
+          "endsPattern": "^\\s*(Now listening on:|Application started\\.)"
+        }
+      }
+    }
+  ]
+}
