@@ -115,7 +115,7 @@ public static class WebApplicationExtensions
 
         // Replace bind-all placeholders with a host the browser can actually reach.
         return address
-            .Replace("://0.0.0.0", "://localhost", StringComparison.Ordinal)
+            .Replace("://127.0.0.1", "://localhost", StringComparison.Ordinal)
             .Replace("://[::]", "://localhost", StringComparison.Ordinal)
             .Replace("://+", "://localhost", StringComparison.Ordinal)
             .Replace("://*", "://localhost", StringComparison.Ordinal)

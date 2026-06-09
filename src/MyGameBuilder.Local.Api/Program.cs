@@ -1,7 +1,11 @@
 using MyGameBuilder.Local.Api.Endpoints;
 using MyGameBuilder.Local.Api.Extensions;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory
+});
 
 // Wire-compatible local backend for the legacy MyGameBuilder Flash client, plus a same-origin
 // front-end host (landing page + Ruffle launcher + static client assets) like the old Python
