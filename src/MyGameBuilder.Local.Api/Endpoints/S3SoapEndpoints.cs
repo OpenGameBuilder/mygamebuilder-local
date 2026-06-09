@@ -10,7 +10,7 @@ namespace MyGameBuilder.Local.Api.Endpoints;
 /// </summary>
 public static class S3SoapEndpoints
 {
-    private static readonly string[] s_routes = ["/soap", "/s3soap", "/apphost/soap"];
+    private static readonly string[] s_routes = ["/", "/soap", "/s3soap", "/apphost/soap"];
 
     public static IEndpointRouteBuilder MapS3SoapEndpoints(this IEndpointRouteBuilder app)
     {

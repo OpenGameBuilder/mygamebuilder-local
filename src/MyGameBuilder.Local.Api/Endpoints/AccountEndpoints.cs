@@ -24,6 +24,7 @@ public static class AccountEndpoints
         app.MapPost("/user/flexlogin", LoginAsync);
         app.MapPost("/user/flexcreateuser", CreateUserAsync);
         app.MapPost("/user/flexlogout", () => XmlResults.Xml("<status>1</status><message>Logged out</message>"));
+        app.MapMethods("/user/flex_heartbeat", ["GET", "POST"], Heartbeat);
         app.MapMethods("/user/flex_heartbeat_safe", ["GET", "POST"], Heartbeat);
         app.MapMethods("/user/get_user_stats", ["GET", "POST"], UserStatsAsync);
         app.MapMethods("/user/flex_browse_users", ["GET", "POST"], BrowseUsers);

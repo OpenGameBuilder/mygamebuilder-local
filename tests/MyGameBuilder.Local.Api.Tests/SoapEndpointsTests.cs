@@ -43,6 +43,23 @@ public sealed class SoapEndpointsTests
     }
 
     [Fact]
+    public async Task RootPost_DispatchesSoap_ForLegacyEndpointWithoutPath()
+    {
+        using var archive = new TempArchive();
+        archive.AddObject("alice/project1/tile/Brick", Encoding.UTF8.GetBytes("brick-bytes"));
+
+        using var factory = new BackendFactory(archive);
+        using var client = factory.CreateClient();
+
+        var response = await PostSoapAsync(client, "/", Operation("GetObject", ("Key", "alice/project1/tile/Brick")));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var doc = XDocument.Parse(await response.Content.ReadAsStringAsync());
+        var data = doc.Descendants(Ns1 + "Data").Single().Value;
+        Assert.Equal("brick-bytes", Encoding.UTF8.GetString(Convert.FromBase64String(data)));
+    }
+
+    [Fact]
     public async Task GetObject_Missing_Returns404Fault()
     {
         using var archive = new TempArchive();

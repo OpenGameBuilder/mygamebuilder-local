@@ -177,6 +177,19 @@ public sealed class AccountEndpointsTests
     }
 
     [Fact]
+    public async Task Heartbeat_LegacyPath_ReturnsDummyKeys()
+    {
+        using var archive = new TempArchive();
+        using var factory = new BackendFactory(archive);
+        using var client = factory.CreateClient();
+
+        var fragment = await GetFragmentAsync(client, "/user/flex_heartbeat");
+
+        Assert.Equal("DUMMYKEY1&DUMMYKEY2&DUMMYKEY3&DUMMYKEY4", fragment.Element("keyz")!.Value);
+        Assert.Equal("ok", fragment.Element("status")!.Value);
+    }
+
+    [Fact]
     public async Task BrowseUsers_UnionsDbAndArchiveUsers()
     {
         using var archive = new TempArchive();

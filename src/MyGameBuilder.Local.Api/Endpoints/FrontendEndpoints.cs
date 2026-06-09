@@ -134,11 +134,13 @@ public static class FrontendEndpoints
                 ['http://50.18.54.95:3000/user/flexlogin', '/user/flexlogin'],
                 ['http://50.18.54.95:3000/user/flexcreateuser', '/user/flexcreateuser'],
                 ['http://50.18.54.95:3000/user/flexlogout', '/user/flexlogout'],
+                ['http://50.18.54.95:3000/user/flex_heartbeat', '/user/flex_heartbeat'],
                 ['http://50.18.54.95:3000/user/flex_heartbeat_safe', '/user/flex_heartbeat_safe'],
                 ['http://50.18.54.95:3000/user/get_user_stats', '/user/get_user_stats'],
                 ['http://50.18.54.95:3000/user/flex_browse_users', '/user/flex_browse_users'],
                 ['http://50.18.54.95:3000/log/logbug', '/log/logbug'],
                 [/^http:\/\/50\.18\.54\.95:3000\/(.*)$/i, '/$1'],
+                [/^http:\/\/ec2-75-101-194-223\.compute-1\.amazonaws\.com\/(.*)$/i, '/$1'],
                 [/^https?:\/\/s3\.amazonaws\.com\/apphost\/(.*)$/i, '/apphost/$1'],
               ],
             };
