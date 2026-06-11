@@ -45,6 +45,14 @@ internal static class PieceStoreSqlite
 
     internal static byte[] KeyBytes(string key) => Encoding.UTF8.GetBytes(key);
 
+    internal static void AddPrefixRangeParameters(SqliteCommand command, string prefix)
+    {
+        var prefixBytes = KeyBytes(prefix);
+        command.Parameters.Add("$prefix_utf8", SqliteType.Blob).Value = prefixBytes;
+        command.Parameters.Add("$prefix_end_utf8", SqliteType.Blob).Value =
+            PrefixUpperBound(prefixBytes) is { } end ? end : DBNull.Value;
+    }
+
     internal static string FormatUtc(DateTimeOffset value) =>
         value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 
@@ -53,4 +61,27 @@ internal static class PieceStoreSqlite
             value,
             CultureInfo.InvariantCulture,
             DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+
+    private static byte[]? PrefixUpperBound(byte[] prefix)
+    {
+        if (prefix.Length == 0)
+        {
+            return null;
+        }
+
+        var upper = prefix.ToArray();
+        for (var i = upper.Length - 1; i >= 0; i--)
+        {
+            if (upper[i] == byte.MaxValue)
+            {
+                continue;
+            }
+
+            upper[i]++;
+            Array.Resize(ref upper, i + 1);
+            return upper;
+        }
+
+        return null;
+    }
 }

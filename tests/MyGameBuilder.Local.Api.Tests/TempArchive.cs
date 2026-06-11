@@ -15,10 +15,10 @@ public sealed class TempArchive : IDisposable
 
     public TempArchive(bool createArchive = true)
     {
-        Root = Path.Combine(Path.GetTempPath(), "mgb-archive-" + Guid.NewGuid().ToString("N"));
+        Root = Path.Join(Path.GetTempPath(), "mgb-archive-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Root);
-        ArchivePath = Path.Combine(Root, "archive.sqlite");
-        OverlayPath = Path.Combine(Root, "overlay.sqlite");
+        ArchivePath = Path.Join(Root, "archive.sqlite");
+        OverlayPath = Path.Join(Root, "overlay.sqlite");
         if (createArchive)
         {
             InitializeArchive("mgb-jgi-test1-unversioned-archive");

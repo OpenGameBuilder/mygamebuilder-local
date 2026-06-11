@@ -109,10 +109,11 @@ public sealed class ArchivePieceStore
                 meta_comment,
                 meta_acl
             FROM v_mgb_pieces
-            WHERE substr(key_text, 1, length($prefix)) = $prefix
+            WHERE key_utf8 >= $prefix_utf8
+              AND ($prefix_end_utf8 IS NULL OR key_utf8 < $prefix_end_utf8)
             ORDER BY key_text COLLATE BINARY;
             """;
-        command.Parameters.AddWithValue("$prefix", prefix);
+        PieceStoreSqlite.AddPrefixRangeParameters(command, prefix);
 
         var entries = new List<PieceEntry>();
         using var reader = command.ExecuteReader();

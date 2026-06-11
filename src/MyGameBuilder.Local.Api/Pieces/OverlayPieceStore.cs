@@ -61,28 +61,26 @@ public sealed class OverlayPieceStore : IPieceStore
     {
         prefix ??= string.Empty;
         var effective = new Dictionary<string, PieceListItem>(StringComparer.Ordinal);
+        var tombstonedKeys = _data.TombstonedKeys(prefix);
 
         // The archive is queried only under the requested prefix, so a single-user
         // or project listing does not fetch object bodies.
         foreach (var entry in _archive.ListEntries(prefix))
         {
-            if (!_data.IsTombstoned(entry.Key))
+            if (!tombstonedKeys.Contains(entry.Key))
             {
                 effective[entry.Key] = new PieceListItem(entry.Key, entry.Size, entry.LastModified);
             }
         }
 
-        foreach (var entry in _data.SnapshotEntries())
+        foreach (var entry in _data.ListEntries(prefix))
         {
-            if (entry.Key.StartsWith(prefix, StringComparison.Ordinal))
-            {
-                effective[entry.Key] = new PieceListItem(entry.Key, entry.Size, entry.LastModified);
-            }
+            effective[entry.Key] = new PieceListItem(entry.Key, entry.Size, entry.LastModified);
         }
 
         foreach (var item in DefaultProfilePieces.List(prefix))
         {
-            if (!_data.IsTombstoned(item.Key))
+            if (!tombstonedKeys.Contains(item.Key))
             {
                 effective.TryAdd(item.Key, item);
             }
@@ -98,14 +96,9 @@ public sealed class OverlayPieceStore : IPieceStore
             return false;
         }
 
-        var prefix = user + "/";
-
-        foreach (var entry in _data.SnapshotEntries())
+        if (_data.UserExists(user))
         {
-            if (entry.Key.StartsWith(prefix, StringComparison.Ordinal))
-            {
-                return true;
-            }
+            return true;
         }
 
         if (string.Equals(user, "!system", StringComparison.Ordinal) ||
@@ -129,13 +122,9 @@ public sealed class OverlayPieceStore : IPieceStore
         }
 
         // Include users that exist only in the writable overlay.
-        foreach (var entry in _data.SnapshotEntries())
+        foreach (var user in _data.ListUsers())
         {
-            var user = PieceKey.UserOf(entry.Key);
-            if (user.Length > 0)
-            {
-                users.Add(user);
-            }
+            users.Add(user);
         }
 
         users.Add("!system");

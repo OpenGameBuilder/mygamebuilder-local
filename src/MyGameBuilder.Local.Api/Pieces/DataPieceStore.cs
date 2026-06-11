@@ -204,10 +204,12 @@ public sealed class DataPieceStore
         }
 
         using var connection = PieceStoreSqlite.OpenReadWriteCreate(_overlayPath);
+        using var transaction = connection.BeginTransaction();
         using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText =
             """
-            SELECT key_text, content_length_bytes, updated_utc, content_type
+            SELECT key_text, content_length_bytes, updated_utc, content_type, body
             FROM local_object_overlay
             WHERE key_utf8 = $key_utf8
               AND is_delete_marker = 0
@@ -225,18 +227,23 @@ public sealed class DataPieceStore
         var size = reader.GetInt64(1);
         var updatedUtc = PieceStoreSqlite.ParseUtc(reader.GetString(2));
         var contentType = reader.IsDBNull(3) ? null : reader.GetString(3);
-        var metadata = ReadMetadata(keyText);
+        var body = (byte[])reader["body"];
+        reader.Dispose();
+
+        var metadata = ReadMetadata(connection, transaction, keyBytes: PieceStoreSqlite.KeyBytes(keyText));
+        transaction.Commit();
+
         entry = new PieceEntry(
             keyText,
             size,
             updatedUtc,
             contentType,
             metadata,
-            cancellationToken => LoadBodyAsync(keyText, cancellationToken));
+            _ => ValueTask.FromResult(body.ToArray()));
         return true;
     }
 
-    internal IReadOnlyList<PieceEntry> SnapshotEntries()
+    internal IReadOnlyList<PieceEntry> ListEntries(string prefix)
     {
         using var connection = PieceStoreSqlite.OpenReadWriteCreate(_overlayPath);
         using var command = connection.CreateCommand();
@@ -245,8 +252,11 @@ public sealed class DataPieceStore
             SELECT key_text, content_length_bytes, updated_utc, content_type
             FROM local_object_overlay
             WHERE is_delete_marker = 0
+              AND key_utf8 >= $prefix_utf8
+              AND ($prefix_end_utf8 IS NULL OR key_utf8 < $prefix_end_utf8)
             ORDER BY key_text COLLATE BINARY;
             """;
+        PieceStoreSqlite.AddPrefixRangeParameters(command, prefix);
 
         var entries = new List<PieceEntry>();
         using var reader = command.ExecuteReader();
@@ -268,10 +278,79 @@ public sealed class DataPieceStore
         return entries;
     }
 
-    private IReadOnlyList<KeyValuePair<string, string>> ReadMetadata(string key)
+    internal IReadOnlySet<string> TombstonedKeys(string prefix)
     {
         using var connection = PieceStoreSqlite.OpenReadWriteCreate(_overlayPath);
         using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT key_text
+            FROM local_object_overlay
+            WHERE is_delete_marker = 1
+              AND key_utf8 >= $prefix_utf8
+              AND ($prefix_end_utf8 IS NULL OR key_utf8 < $prefix_end_utf8);
+            """;
+        PieceStoreSqlite.AddPrefixRangeParameters(command, prefix);
+
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            keys.Add(reader.GetString(0));
+        }
+
+        return keys;
+    }
+
+    internal bool UserExists(string user)
+    {
+        if (string.IsNullOrEmpty(user))
+        {
+            return false;
+        }
+
+        using var connection = PieceStoreSqlite.OpenReadWriteCreate(_overlayPath);
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT 1
+            FROM local_object_overlay
+            WHERE is_delete_marker = 0
+              AND key_utf8 >= $prefix_utf8
+              AND ($prefix_end_utf8 IS NULL OR key_utf8 < $prefix_end_utf8)
+            LIMIT 1;
+            """;
+        PieceStoreSqlite.AddPrefixRangeParameters(command, user + "/");
+        return command.ExecuteScalar() is not null;
+    }
+
+    internal IReadOnlyCollection<string> ListUsers()
+    {
+        using var connection = PieceStoreSqlite.OpenReadWriteCreate(_overlayPath);
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT DISTINCT substr(key_text, 1, instr(key_text, '/') - 1) AS user_name
+            FROM local_object_overlay
+            WHERE is_delete_marker = 0
+              AND instr(key_text, '/') > 1
+            ORDER BY user_name COLLATE BINARY;
+            """;
+
+        var users = new List<string>();
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            users.Add(reader.GetString(0));
+        }
+
+        return users;
+    }
+
+    private static IReadOnlyList<KeyValuePair<string, string>> ReadMetadata(SqliteConnection connection, SqliteTransaction? transaction, byte[] keyBytes)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText =
             """
             SELECT name, value
@@ -279,7 +358,7 @@ public sealed class DataPieceStore
             WHERE key_utf8 = $key_utf8
             ORDER BY ordinal;
             """;
-        command.Parameters.Add("$key_utf8", SqliteType.Blob).Value = PieceStoreSqlite.KeyBytes(key);
+        command.Parameters.Add("$key_utf8", SqliteType.Blob).Value = keyBytes;
 
         var metadata = new List<KeyValuePair<string, string>>();
         using var reader = command.ExecuteReader();

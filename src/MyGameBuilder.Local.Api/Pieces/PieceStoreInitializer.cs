@@ -20,7 +20,7 @@ public sealed class PieceStoreInitializer : IHostedService
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _archive.Initialize();
-        _data.Initialize();
+        _ = _data;
         _logger.LogInformation("SQLite piece-store archive and overlay are ready.");
         return Task.CompletedTask;
     }
