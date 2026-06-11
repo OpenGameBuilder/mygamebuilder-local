@@ -55,7 +55,7 @@ public static class WebApplicationExtensions
     }
 
     /// <summary>
-    /// Prints a console banner with the navigable URLs and resolved data directories once the
+    /// Prints a console banner with the navigable URLs and resolved data files once the
     /// server is listening. Written straight to the console so the URL stands out from the logs.
     /// </summary>
     public static WebApplication LogStartupBanner(this WebApplication app)
@@ -69,10 +69,10 @@ public static class WebApplicationExtensions
             var contentRoot = app.Environment.ContentRootPath;
 
             var frontendRoot = ResolveContentPath(contentRoot, frontend.RootPath);
-            var archiveRoot = ResolveContentPath(contentRoot, pieces.ArchiveRoot);
-            var dataRoot = ResolveContentPath(contentRoot, pieces.DataRoot);
+            var archivePath = ResolveContentPath(contentRoot, pieces.ArchivePath);
+            var overlayPath = ResolveContentPath(contentRoot, pieces.OverlayPath);
             var baseUrl = ResolveBrowseUrl(app);
-            var archiveNote = Directory.Exists(archiveRoot) ? string.Empty : "  (optional - not present yet)";
+            var archiveNote = File.Exists(archivePath) ? string.Empty : "  (optional - not present yet)";
 
             Console.WriteLine();
             Console.WriteLine("==================================================================");
@@ -84,8 +84,8 @@ public static class WebApplicationExtensions
             Console.WriteLine("------------------------------------------------------------------");
             Console.WriteLine($"  Front-end dir:  {frontendRoot}");
             Console.WriteLine($"                  drop {frontend.SwfName} (and its assets) here");
-            Console.WriteLine($"  Archive dir  :  {archiveRoot}{archiveNote}");
-            Console.WriteLine($"  Data dir     :  {dataRoot}");
+            Console.WriteLine($"  Archive DB   :  {archivePath}{archiveNote}");
+            Console.WriteLine($"  Overlay DB   :  {overlayPath}");
             Console.WriteLine("==================================================================");
             Console.WriteLine();
         });

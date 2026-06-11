@@ -7,7 +7,7 @@ namespace MyGameBuilder.Local.Api.Tests;
 
 /// <summary>
 /// Hosts the backend in-memory for integration tests, pointing the piece store at a
-/// caller-provided <see cref="TempArchive"/> so archive reads use real data. The
+/// caller-provided <see cref="TempArchive"/> so archive reads use real SQLite data. The
 /// Kestrel URL binding from appsettings.json is overridden to avoid binding port 3000.
 /// </summary>
 public sealed class BackendFactory : WebApplicationFactory<Program>
@@ -28,8 +28,8 @@ public sealed class BackendFactory : WebApplicationFactory<Program>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["PieceStore:ArchiveRoot"] = _archive.ArchiveRoot,
-                ["PieceStore:DataRoot"] = _archive.DataRoot,
+                ["PieceStore:ArchivePath"] = _archive.ArchivePath,
+                ["PieceStore:OverlayPath"] = _archive.OverlayPath,
                 // Keep the front-end static root inside the temp tree so tests never create a
                 // frontend/ folder in the project content root (TempArchive cleans this up).
                 ["Frontend:RootPath"] = Path.Combine(_archive.Root, "frontend"),

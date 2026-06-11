@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using MyGameBuilder.Local.Api.Accounts;
 using MyGameBuilder.Local.Api.Configuration;
@@ -10,7 +9,7 @@ namespace MyGameBuilder.Local.Api.Extensions;
 
 /// <summary>
 /// Registers the backend's services. Only the piece store is backed by real archive
-/// data; the accounts and game-stats stores are in-memory fakes. Paths in
+/// data; the accounts and game-stats stores are in-memory fakes. SQLite paths in
 /// <see cref="PieceStoreOptions"/> are resolved relative to the content root and are
 /// bound lazily so test hosts can override them before the container is built.
 /// </summary>
@@ -51,16 +50,13 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(provider =>
         {
             var options = provider.GetRequiredService<IOptions<PieceStoreOptions>>().Value;
-            // A dedicated, size-limited cache isolates archive index/listing eviction from
-            // the rest of the app and keeps memory bounded even with tens of thousands of users.
-            var cache = new MemoryCache(new MemoryCacheOptions { SizeLimit = options.CacheSizeLimit });
-            return new ArchivePieceStore(ResolvePath(environment.ContentRootPath, options.ArchiveRoot), cache);
+            return new ArchivePieceStore(ResolvePath(environment.ContentRootPath, options.ArchivePath));
         });
 
         services.AddSingleton(provider =>
         {
             var options = provider.GetRequiredService<IOptions<PieceStoreOptions>>().Value;
-            return new DataPieceStore(ResolvePath(environment.ContentRootPath, options.DataRoot));
+            return new DataPieceStore(ResolvePath(environment.ContentRootPath, options.OverlayPath));
         });
 
         services.AddSingleton<IPieceStore>(provider =>

@@ -62,8 +62,8 @@ public sealed class OverlayPieceStore : IPieceStore
         prefix ??= string.Empty;
         var effective = new Dictionary<string, PieceListItem>(StringComparer.Ordinal);
 
-        // The archive is queried only under the requested prefix (index-scoped), so a
-        // single-user/project listing never walks the whole archive.
+        // The archive is queried only under the requested prefix, so a single-user
+        // or project listing does not fetch object bodies.
         foreach (var entry in _archive.ListEntries(prefix))
         {
             if (!_data.IsTombstoned(entry.Key))
@@ -122,7 +122,7 @@ public sealed class OverlayPieceStore : IPieceStore
     {
         var users = new HashSet<string>(StringComparer.Ordinal);
 
-        // Archive users come straight from the root index (no content scan).
+        // Archive users come from metadata-only SQLite rows; object bodies are not read.
         foreach (var user in _archive.ListUsers())
         {
             users.Add(user);
@@ -167,5 +167,5 @@ public sealed class OverlayPieceStore : IPieceStore
             entry.LastModified,
             entry.ContentType,
             entry.AmzMeta,
-            cancellationToken => new ValueTask<byte[]>(File.ReadAllBytesAsync(entry.BodyPath, cancellationToken)));
+            entry.BodyLoader);
 }

@@ -29,7 +29,7 @@ app.MapS3SoapEndpoints();
 app.MapGameStatsEndpoints();
 app.MapStubEndpoints();
 
-// Print the navigable URL and resolved data directories once the server is listening.
+// Print the navigable URL and resolved data files once the server is listening.
 app.LogStartupBanner();
 
 app.Run();

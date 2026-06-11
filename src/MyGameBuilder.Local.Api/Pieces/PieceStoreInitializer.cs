@@ -1,23 +1,27 @@
 namespace MyGameBuilder.Local.Api.Pieces;
 
-/// <summary>Forces piece-store startup work such as creating the writable data root.</summary>
+/// <summary>Forces piece-store startup work such as validating archive and overlay databases.</summary>
 public sealed class PieceStoreInitializer : IHostedService
 {
+    private readonly ArchivePieceStore _archive;
     private readonly DataPieceStore _data;
     private readonly ILogger<PieceStoreInitializer> _logger;
 
-    public PieceStoreInitializer(DataPieceStore data, ILogger<PieceStoreInitializer> logger)
+    public PieceStoreInitializer(ArchivePieceStore archive, DataPieceStore data, ILogger<PieceStoreInitializer> logger)
     {
+        ArgumentNullException.ThrowIfNull(archive);
         ArgumentNullException.ThrowIfNull(data);
         ArgumentNullException.ThrowIfNull(logger);
+        _archive = archive;
         _data = data;
         _logger = logger;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Writable piece-store data directory is ready.");
-        _ = _data;
+        _archive.Initialize();
+        _data.Initialize();
+        _logger.LogInformation("SQLite piece-store archive and overlay are ready.");
         return Task.CompletedTask;
     }
 
