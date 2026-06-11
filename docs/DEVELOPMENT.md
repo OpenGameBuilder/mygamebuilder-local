@@ -49,8 +49,8 @@ Useful tasks are available from **Terminal: Run Task**:
 
 The default configuration uses:
 
-- `archive` for imported archive content.
-- `data` for writable local overlay data.
-- hard-coded in-memory fallback profiles for the special `guest` and `!system` accounts when no archive/data profile exists.
+- `archive.sqlite` for imported read-only archive content.
+- `overlay.sqlite` for writable local overlay data.
+- hard-coded in-memory fallback profiles for the special `guest` and `!system` accounts when no archive/overlay profile exists.
 
-The app creates `data/` on startup if it is missing. Overlay objects and tombstones are created inside it only after the client writes or deletes pieces.
+The archive file is optional; when it is absent, the app behaves as an empty base archive. The app creates `overlay.sqlite` on startup if it is missing. Overlay objects and tombstones are stored there after the client writes or deletes pieces.

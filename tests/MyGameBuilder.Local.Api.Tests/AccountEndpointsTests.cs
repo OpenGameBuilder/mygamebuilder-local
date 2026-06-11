@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
 using System.Xml.Linq;
-using Microsoft.Extensions.Caching.Memory;
 using MyGameBuilder.Local.Api.Accounts;
 using MyGameBuilder.Local.Api.Pieces;
 
@@ -18,10 +17,9 @@ public sealed class AccountEndpointsTests
     public void AccountStore_ExistingAccount_SucceedsWithAnyPassword()
     {
         using var archive = new TempArchive();
-        using var pieces = new MemoryCache(new MemoryCacheOptions());
         var store = new AccountStore(new OverlayPieceStore(
-            new ArchivePieceStore(archive.ArchiveRoot, pieces),
-            new DataPieceStore(archive.DataRoot)));
+            new ArchivePieceStore(archive.ArchivePath),
+            new DataPieceStore(archive.OverlayPath)));
         Assert.True(store.TryCreate(new Account { Login = "alice", Password = "secret" }));
 
         var result = store.Login("alice", string.Empty);
@@ -45,10 +43,10 @@ public sealed class AccountEndpointsTests
     }
 
     [Fact]
-    public async Task Startup_CreatesWritableDataDirectory()
+    public async Task Startup_CreatesWritableOverlayDatabase()
     {
         using var archive = new TempArchive();
-        Directory.Delete(archive.DataRoot, recursive: true);
+        File.Delete(archive.OverlayPath);
 
         using var factory = new BackendFactory(archive);
         using var client = factory.CreateClient();
@@ -56,9 +54,7 @@ public sealed class AccountEndpointsTests
         var response = await client.GetAsync("/healthz");
 
         response.EnsureSuccessStatusCode();
-        Assert.True(Directory.Exists(archive.DataRoot));
-        Assert.False(Directory.Exists(Path.Combine(archive.DataRoot, "objects")));
-        Assert.False(Directory.Exists(Path.Combine(archive.DataRoot, "tombstones")));
+        Assert.True(File.Exists(archive.OverlayPath));
     }
 
     [Fact]
