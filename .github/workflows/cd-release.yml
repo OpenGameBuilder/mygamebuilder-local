@@ -149,11 +149,12 @@ jobs:
 
           Optional local data:
             archive.sqlite        read-only piece archive next to the executable
-            frontend/MGB.swf      Flash client and supporting frontend assets
+            frontend.sqlite       recovered frontend/client archive next to the executable
 
           GitHub Release archives intentionally do not bundle legacy client,
           frontend, archive, or overlay data. The app creates overlay.sqlite
-          next to the executable for local writes.
+          next to the executable for local writes and can install prompted
+          frontend/data archive updates from the in-app setup page.
           "@
           $readme = $readme -replace "(?m)^          ", ""
           Set-Content -Path (Join-Path $output "README.txt") -Value $readme -Encoding UTF8
@@ -316,7 +317,31 @@ jobs:
           done
 
           find artifacts/dist -maxdepth 1 -type f -print | sort
-          (cd artifacts/dist && sha256sum "${expected[@]}" | sort -k2 > SHA256SUMS.txt)
+
+          assets_json='[]'
+          for asset in "${expected[@]}"; do
+            rid="${asset#mygamebuilder-local-${VERSION}-}"
+            rid="${rid%.zip}"
+            rid="${rid%.tar.gz}"
+            sha="$(sha256sum "artifacts/dist/${asset}" | awk '{print $1}')"
+            size="$(stat -c '%s' "artifacts/dist/${asset}")"
+            assets_json="$(jq -c \
+              --arg rid "${rid}" \
+              --arg name "${asset}" \
+              --arg sha256 "${sha}" \
+              --argjson sizeBytes "${size}" \
+              '. + [{ rid: $rid, name: $name, sha256: $sha256, sizeBytes: $sizeBytes }]' \
+              <<< "${assets_json}")"
+          done
+
+          jq -n \
+            --arg version "${VERSION}" \
+            --arg tag "v${VERSION}" \
+            --argjson assets "${assets_json}" \
+            '{ version: $version, tag: $tag, assets: $assets }' \
+            > artifacts/dist/mygamebuilder-local-release.json
+
+          (cd artifacts/dist && sha256sum "${expected[@]}" mygamebuilder-local-release.json | sort -k2 > SHA256SUMS.txt)
 
       - name: Create tag and GitHub Release
         env:

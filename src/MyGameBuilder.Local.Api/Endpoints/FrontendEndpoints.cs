@@ -4,6 +4,7 @@ using MyGameBuilder.Local.Api.Configuration;
 using MyGameBuilder.Local.Api.Extensions;
 using MyGameBuilder.Local.Api.Frontend;
 using MyGameBuilder.Local.Api.Http;
+using MyGameBuilder.Local.Api.Updates;
 
 namespace MyGameBuilder.Local.Api.Endpoints;
 
@@ -127,7 +128,7 @@ public static class FrontendEndpoints
     private static IResult Html(string content) => Results.Text(content, "text/html", Encoding.UTF8);
 
     private static IResult MissingFrontendArchive(string archivePath) =>
-        Results.Text(BuildMissingFrontendArchivePage(archivePath), "text/html", Encoding.UTF8, StatusCodes.Status503ServiceUnavailable);
+        Results.Text(UpdatePageRenderer.BuildSetupPrompt(archivePath), "text/html", Encoding.UTF8, StatusCodes.Status503ServiceUnavailable);
 
     private static IResult FrontendAsset(string path, HttpRequest request, FrontendArchiveAsset asset)
     {
@@ -144,16 +145,6 @@ public static class FrontendEndpoints
 
     private static string BuildRufflePage(string swfUrl) =>
         RufflePageTemplate.Replace("__MGB_SWF_URL__", swfUrl, StringComparison.Ordinal);
-
-    private static string BuildMissingFrontendArchivePage(string archivePath) =>
-        MissingFrontendArchiveTemplate.Replace("__FRONTEND_ARCHIVE_PATH__", HtmlEncode(archivePath), StringComparison.Ordinal);
-
-    private static string HtmlEncode(string value) =>
-        value
-            .Replace("&", "&amp;", StringComparison.Ordinal)
-            .Replace("<", "&lt;", StringComparison.Ordinal)
-            .Replace(">", "&gt;", StringComparison.Ordinal)
-            .Replace("\"", "&quot;", StringComparison.Ordinal);
 
     private const string CrossDomainPolicy =
         """
@@ -218,30 +209,4 @@ public static class FrontendEndpoints
         </html>
         """;
 
-    private const string MissingFrontendArchiveTemplate =
-        """
-        <!doctype html>
-        <html lang="en">
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>MyGameBuilder Local setup needed</title>
-          <style>
-            html, body { min-height: 100%; margin: 0; background: #191b1f; color: #f2f2f2; font-family: Arial, sans-serif; }
-            body { display: grid; place-items: center; padding: 32px; box-sizing: border-box; }
-            main { max-width: 720px; }
-            h1 { font-size: 28px; line-height: 1.2; margin: 0 0 16px; }
-            p { font-size: 16px; line-height: 1.55; margin: 12px 0; color: #d8dce3; }
-            code { color: #ffffff; background: #2a2f38; padding: 2px 5px; border-radius: 4px; }
-          </style>
-        </head>
-        <body>
-          <main>
-            <h1>MyGameBuilder Local needs frontend.sqlite</h1>
-            <p>The server is running, but the recovered client archive was not found at <code>__FRONTEND_ARCHIVE_PATH__</code>.</p>
-            <p>Add <code>frontend.sqlite</code> beside the app, or update <code>Frontend:ArchivePath</code> in <code>appsettings.json</code>, then restart MyGameBuilder Local.</p>
-          </main>
-        </body>
-        </html>
-        """;
 }
