@@ -78,13 +78,18 @@ public sealed class ArchiveUpdateInstaller
 
                 var destinationPath = Path.Combine(prepareDirectory, asset.Name);
                 var assetStart = completedBytes;
-                var progress = new Progress<long>(bytes =>
+                var progress = new InlineProgress<long>(bytes =>
                 {
                     var percent = 5 + (int)Math.Min(45, ((assetStart + bytes) * 45) / totalBytes);
                     _stateStore.SetWorking(target, $"Downloading {asset.Name}.", percent);
                 });
                 await _releaseClient.DownloadAssetAsync(githubAsset, destinationPath, progress, cancellationToken).ConfigureAwait(false);
-                await Checksum.EnsureSha256FileAsync(destinationPath, asset.Sha256, cancellationToken).ConfigureAwait(false);
+                var verifyProgress = new InlineProgress<long>(bytes =>
+                {
+                    var percent = 50 + (int)Math.Min(5, (bytes * 5) / Math.Max(1, asset.SizeBytes));
+                    _stateStore.SetWorking(target, $"Verifying {asset.Name}.", percent);
+                });
+                await Checksum.EnsureSha256FileAsync(destinationPath, asset.Sha256, verifyProgress, cancellationToken).ConfigureAwait(false);
                 completedBytes += Math.Max(0, asset.SizeBytes);
             }
 
@@ -93,7 +98,14 @@ public sealed class ArchiveUpdateInstaller
             SplitArchiveAssembler.EnsureSqliteArchiveReady(stagedSqlitePath, _logger);
             if (!string.IsNullOrWhiteSpace(manifest.SqliteSha256))
             {
-                await Checksum.EnsureSha256FileAsync(stagedSqlitePath, manifest.SqliteSha256, cancellationToken).ConfigureAwait(false);
+                _stateStore.SetWorking(target, "Verifying archive database.", 65);
+                var sqliteSize = new FileInfo(stagedSqlitePath).Length;
+                var sqliteVerifyProgress = new InlineProgress<long>(bytes =>
+                {
+                    var percent = 65 + (int)Math.Min(5, (bytes * 5) / Math.Max(1, sqliteSize));
+                    _stateStore.SetWorking(target, "Verifying archive database.", percent);
+                });
+                await Checksum.EnsureSha256FileAsync(stagedSqlitePath, manifest.SqliteSha256, sqliteVerifyProgress, cancellationToken).ConfigureAwait(false);
             }
 
             _stateStore.SetWorking(target, "Validating archive database.", 70);
@@ -110,7 +122,7 @@ public sealed class ArchiveUpdateInstaller
             await ReplaceLiveArchiveAsync(stagedSqlitePath, targetPath, cancellationToken).ConfigureAwait(false);
 
             ResetAndValidateLiveArchive(target);
-            _stateStore.SetIdle(target, $"Installed {release.Tag}.", 100);
+            _stateStore.SetInstalled(target, release.Version, $"Installed {release.Tag}.");
         }
         catch (Exception exc) when (exc is not OperationCanceledException)
         {
@@ -247,5 +259,10 @@ public sealed class ArchiveUpdateInstaller
         {
             // Best-effort cleanup; the live archive has not been replaced if this remains.
         }
+    }
+
+    private sealed class InlineProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value) => handler(value);
     }
 }

@@ -60,8 +60,10 @@ public sealed class UpdateCoordinator
         var frontendPath = _paths.ResolveDataPath(_frontendOptions.Value.ArchivePath);
         var s3Path = _paths.ResolveDataPath(_pieceOptions.Value.ArchivePath);
         var appInstalled = CurrentAppVersion();
-        var s3Installed = ArchiveVersionReader.ReadReleaseVersion(s3Path);
-        var frontendInstalled = ArchiveVersionReader.ReadReleaseVersion(frontendPath);
+        var s3Exists = File.Exists(s3Path);
+        var frontendExists = File.Exists(frontendPath);
+        var s3Installed = ReadArchiveInstalledVersion(s3Path, s3Exists, state.S3Archive);
+        var frontendInstalled = ReadArchiveInstalledVersion(frontendPath, frontendExists, state.FrontendArchive);
         var appPublishedLayout = SelfUpdateApplier.IsPublishedLayout(_environment.ContentRootPath);
         var appUpdateAvailable = IsUpdateAvailable(state.App.AvailableVersion, appInstalled, missing: false);
         var appCanInstall = appPublishedLayout;
@@ -80,7 +82,7 @@ public sealed class UpdateCoordinator
         return new UpdateStatusDto(
             _updateOptions.Value.Enabled,
             DateTimeOffset.UtcNow,
-            !File.Exists(frontendPath) || !File.Exists(s3Path),
+            !frontendExists || !s3Exists,
             BuildTargetStatus(
                 UpdateTarget.App,
                 appInstalled,
@@ -91,13 +93,13 @@ public sealed class UpdateCoordinator
             BuildTargetStatus(
                 UpdateTarget.S3Archive,
                 s3Installed,
-                missing: !File.Exists(s3Path),
+                missing: !s3Exists,
                 canInstall: true,
                 state.S3Archive),
             BuildTargetStatus(
                 UpdateTarget.FrontendArchive,
                 frontendInstalled,
-                missing: !File.Exists(frontendPath),
+                missing: !frontendExists,
                 canInstall: true,
                 state.FrontendArchive));
     }
@@ -134,6 +136,7 @@ public sealed class UpdateCoordinator
         await _installGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            _stateStore.SetWorking(UpdateTarget.App, "Preparing app update.", 1);
             var release = await _releaseClient.GetLatestReleaseAsync(UpdateTarget.App, cancellationToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("No app update release is available.");
             await _appInstaller.InstallAsync(release, cancellationToken).ConfigureAwait(false);
@@ -159,6 +162,7 @@ public sealed class UpdateCoordinator
         await _installGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            _stateStore.SetWorking(target, $"Preparing {UpdateTargets.ToId(target)} archive update.", 1);
             var release = await _releaseClient.GetLatestReleaseAsync(target, cancellationToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException($"No {UpdateTargets.ToId(target)} archive update release is available.");
             await _archiveInstaller.InstallAsync(target, release, cancellationToken).ConfigureAwait(false);
@@ -215,6 +219,7 @@ public sealed class UpdateCoordinator
     {
         var updateAvailable = IsUpdateAvailable(state.AvailableVersion, installedVersion, missing);
         var effectiveCanInstall = canInstall && updateAvailable && state.State != "working";
+        var progressPercent = state.State == "working" ? state.ProgressPercent : 0;
         var message = messageOverride ?? state.Message;
         if (messageOverride is null &&
             state.State is not ("working" or "error") &&
@@ -236,9 +241,19 @@ public sealed class UpdateCoordinator
             state.ReleaseUrl,
             state.DownloadSizeBytes,
             state.State,
-            state.ProgressPercent,
+            progressPercent,
             message,
             state.LastCheckedUtc);
+    }
+
+    private static string? ReadArchiveInstalledVersion(string path, bool exists, UpdateTargetState state)
+    {
+        if (!exists)
+        {
+            return null;
+        }
+
+        return ArchiveVersionReader.ReadReleaseVersion(path) ?? state.InstalledVersion;
     }
 
     private static bool IsUpdateAvailable(string? availableVersion, string? installedVersion, bool missing) =>

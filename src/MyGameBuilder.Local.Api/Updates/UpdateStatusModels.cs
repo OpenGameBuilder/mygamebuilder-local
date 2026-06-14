@@ -52,6 +52,8 @@ internal sealed class UpdateTargetState
 
     public string? AvailableVersion { get; set; }
 
+    public string? InstalledVersion { get; set; }
+
     public string? ReleaseName { get; set; }
 
     public string? ReleaseUrl { get; set; }

@@ -62,6 +62,19 @@ public sealed class UpdateStateStore
         });
     }
 
+    internal void SetInstalled(UpdateTarget target, string version, string message)
+    {
+        Mutate(state =>
+        {
+            var item = state.For(target);
+            item.State = "idle";
+            item.ProgressPercent = 0;
+            item.InstalledVersion = version;
+            item.AvailableVersion = version;
+            item.Message = message;
+        });
+    }
+
     internal void SetError(UpdateTarget target, string message)
     {
         Mutate(state =>

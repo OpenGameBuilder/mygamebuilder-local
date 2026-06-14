@@ -46,6 +46,23 @@ public sealed class FrontendEndpointsTests
     }
 
     [Fact]
+    public async Task Favicon_ServesPackagedIconEvenWhenFrontendArchiveMissing()
+    {
+        using var pieces = new TempArchive();
+        var missingFrontendArchive = Path.Combine(pieces.Root, "missing-frontend.sqlite");
+        using var factory = new BackendFactory(pieces, missingFrontendArchive);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/favicon.ico");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("image/x-icon", response.Content.Headers.ContentType?.MediaType);
+        var expectedBytes = await File.ReadAllBytesAsync(
+            Path.Combine(AppContext.BaseDirectory, "Assets", "favicon.ico"));
+        Assert.Equal(expectedBytes, await response.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
     public async Task AppHostAsset_ServesSwfFromFrontendArchive()
     {
         using var pieces = new TempArchive();

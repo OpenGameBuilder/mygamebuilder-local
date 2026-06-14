@@ -399,6 +399,8 @@ public sealed class UpdateTests
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("MyGameBuilder Local updates", body);
         Assert.Contains("/_updates/status", body);
+        Assert.Contains("V1 user data import", body);
+        Assert.Contains("/_updates/v1-import/scan", body);
     }
 
     [Fact]
@@ -457,6 +459,78 @@ public sealed class UpdateTests
         Assert.Null(ReadArchiveInfo(current.ArchivePath, "release_version"));
         Assert.Equal(1, CountObjects(current.ArchivePath, "old/p/tile/A"));
         Assert.Equal(0, CountObjects(current.ArchivePath, "new/p/tile/B"));
+    }
+
+    [Fact]
+    public async Task FrontendArchiveInstall_WhenArchiveHasNoReleaseVersion_DisablesInstallAndClearsProgress()
+    {
+        using var current = new TempArchive();
+        var contentRoot = Path.Combine(current.Root, "install");
+        Directory.CreateDirectory(contentRoot);
+        var frontendPath = Path.Combine(current.Root, "frontend.sqlite");
+        TempFrontendArchive.CreateArchive(frontendPath);
+        using var replacement = new TempFrontendArchive();
+        replacement.AddMyGameBuilderCapture("/play", Encoding.UTF8.GetBytes("updated"));
+
+        var paths = new ApplicationPathRoots(contentRoot, current.Root);
+        var updateOptions = Options.Create(new UpdateOptions());
+        var pieceOptions = Options.Create(new PieceStoreOptions
+        {
+            ArchivePath = "archive.sqlite",
+            OverlayPath = "overlay.sqlite",
+        });
+        var frontendOptions = Options.Create(new FrontendOptions
+        {
+            ArchivePath = "frontend.sqlite",
+        });
+        var updatePaths = new UpdatePaths(paths, updateOptions);
+        var stateStore = new UpdateStateStore(updatePaths);
+        var fakeClient = new FakeReleaseClient();
+        fakeClient.Releases[UpdateTarget.FrontendArchive] = AddDirectArchiveAsset(
+            fakeClient,
+            UpdateTarget.FrontendArchive,
+            replacement.ArchivePath,
+            "2.0.0");
+        var environment = new TestEnvironment(contentRoot);
+
+        var archiveInstaller = new ArchiveUpdateInstaller(
+            fakeClient,
+            stateStore,
+            updatePaths,
+            pieceOptions,
+            frontendOptions,
+            new ArchivePieceStore(current.ArchivePath),
+            new FrontendArchiveStore(frontendPath, FrontendOptions.DefaultCaptureDateTime),
+            NullLogger<ArchiveUpdateInstaller>.Instance);
+        var appInstaller = new AppUpdateInstaller(
+            fakeClient,
+            stateStore,
+            updatePaths,
+            environment,
+            new TestApplicationLifetime(),
+            NullLogger<AppUpdateInstaller>.Instance);
+        var coordinator = new UpdateCoordinator(
+            fakeClient,
+            stateStore,
+            archiveInstaller,
+            appInstaller,
+            updatePaths,
+            updateOptions,
+            pieceOptions,
+            frontendOptions,
+            environment,
+            NullLogger<UpdateCoordinator>.Instance);
+
+        await coordinator.InstallArchiveUpdateAsync(UpdateTarget.FrontendArchive, CancellationToken.None);
+        var status = coordinator.GetStatus();
+
+        Assert.Null(ReadArchiveInfo(frontendPath, "release_version"));
+        Assert.Equal("2.0.0", status.FrontendArchive.InstalledVersion);
+        Assert.Equal("2.0.0", status.FrontendArchive.AvailableVersion);
+        Assert.False(status.FrontendArchive.UpdateAvailable);
+        Assert.False(status.FrontendArchive.CanInstall);
+        Assert.Equal(0, status.FrontendArchive.ProgressPercent);
+        Assert.Equal("Up to date.", status.FrontendArchive.Message);
     }
 
     private static ArchiveUpdateInstaller CreateArchiveInstaller(
@@ -523,6 +597,42 @@ public sealed class UpdateTests
             new Dictionary<string, GithubReleaseAsset>(StringComparer.Ordinal)
             {
                 [assetName] = new GithubReleaseAsset(assetName, new Uri("https://example.test/" + assetName), size),
+            });
+    }
+
+    private static UpdateRelease AddDirectArchiveAsset(
+        FakeReleaseClient fakeClient,
+        UpdateTarget target,
+        string sqlitePath,
+        string version)
+    {
+        var (kind, tagSuffix, targetFileName) = target switch
+        {
+            UpdateTarget.S3Archive => ("s3", "-s3", "archive.sqlite"),
+            UpdateTarget.FrontendArchive => ("frontend", "-client", "frontend.sqlite"),
+            _ => throw new ArgumentOutOfRangeException(nameof(target), target, null),
+        };
+        var tag = "v" + version + tagSuffix;
+        var size = new FileInfo(sqlitePath).Length;
+        fakeClient.Assets[targetFileName] = sqlitePath;
+        var manifest = new ArchiveReleaseManifest(
+            kind,
+            version,
+            tag,
+            targetFileName,
+            Sha256File(sqlitePath),
+            size,
+            [new ArchiveReleaseAsset(targetFileName, Sha256File(sqlitePath), size, 0)]);
+        return new UpdateRelease(
+            target,
+            tag,
+            version,
+            tag,
+            new Uri("https://github.com/OpenGameBuilder/mygamebuilder-archive/releases/tag/" + tag),
+            manifest,
+            new Dictionary<string, GithubReleaseAsset>(StringComparer.Ordinal)
+            {
+                [targetFileName] = new GithubReleaseAsset(targetFileName, new Uri("https://example.test/" + targetFileName), size),
             });
     }
 

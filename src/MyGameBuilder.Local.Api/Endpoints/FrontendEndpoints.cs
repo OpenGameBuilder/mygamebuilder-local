@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using MyGameBuilder.Local.Api.Configuration;
 using MyGameBuilder.Local.Api.Extensions;
@@ -60,6 +61,8 @@ public static class FrontendEndpoints
 
         // Flash cross-domain policy (allow-all is fine for a local single-origin host).
         app.MapGet("/crossdomain.xml", () => XmlResults.Xml(CrossDomainPolicy));
+
+        app.MapGet("/favicon.ico", (IHostEnvironment environment) => ServeFavicon(environment));
 
         app.MapGet(
             WebApplicationExtensions.FrontendRequestPath + "/{**path}",
@@ -133,6 +136,32 @@ public static class FrontendEndpoints
     private static IResult MissingFrontendArchive(string archivePath) =>
         Results.Text(UpdatePageRenderer.BuildMissingFrontendArchivePage(archivePath), "text/html", Encoding.UTF8, StatusCodes.Status503ServiceUnavailable);
 
+    private static IResult ServeFavicon(IHostEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+
+        var path = ResolveFaviconPath(environment);
+        if (!File.Exists(path))
+        {
+            return Results.NotFound();
+        }
+
+        return Results.File(
+            path,
+            "image/x-icon",
+            lastModified: File.GetLastWriteTimeUtc(path),
+            enableRangeProcessing: false);
+    }
+
+    private static string ResolveFaviconPath(IHostEnvironment environment)
+    {
+        var relativePath = Path.Combine("Assets", "favicon.ico");
+        var outputPath = Path.Combine(AppContext.BaseDirectory, relativePath);
+        return File.Exists(outputPath)
+            ? outputPath
+            : Path.Combine(environment.ContentRootPath, relativePath);
+    }
+
     private static IResult FrontendAsset(string path, HttpRequest request, FrontendArchiveAsset asset)
     {
         var body = FrontendUrlRewriter.RewriteIfInspectable(
@@ -164,6 +193,7 @@ public static class FrontendEndpoints
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
+          <link rel="icon" href="/favicon.ico">
           <title>MyGameBuilder Local</title>
           <style>
             html, body { height: 100%; margin: 0; background: #1e1e1e; color: #eee; font-family: Arial, sans-serif; }

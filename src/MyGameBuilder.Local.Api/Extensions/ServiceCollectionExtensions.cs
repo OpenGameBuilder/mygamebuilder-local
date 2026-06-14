@@ -90,6 +90,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<UpdateSecurityToken>();
         services.AddSingleton<ArchiveUpdateInstaller>();
         services.AddSingleton<AppUpdateInstaller>();
+        services.AddSingleton<V1DataImporter>();
         services.AddSingleton<UpdateCoordinator>();
         services.AddSingleton<UpdateConsoleNotifier>();
         services.AddHostedService<UpdateBackgroundService>();

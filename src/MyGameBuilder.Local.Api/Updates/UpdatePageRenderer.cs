@@ -110,6 +110,22 @@ public static class UpdatePageRenderer
             button:disabled img {
               opacity: .58;
             }
+            input[type="text"] {
+              background: #fff;
+              border: 1px solid #6c7a80;
+              border-radius: 4px;
+              color: #111;
+              font: 12px/1.25 "mgb-abscissa", "Trebuchet MS", Verdana, Arial, sans-serif;
+              min-height: 26px;
+              min-width: 0;
+              padding: 5px 7px;
+              width: 100%;
+            }
+            input[type="text"]:focus {
+              border-color: var(--blue);
+              box-shadow: 0 0 0 2px rgba(0,0,160,.14);
+              outline: none;
+            }
             p { margin: 0; }
             .stage-shell {
               width: min(980px, calc(100vw - 24px));
@@ -275,6 +291,7 @@ public static class UpdatePageRenderer
             .target-panel[data-state="working"] .status-lamp {
               background: radial-gradient(circle at 35% 35%, #ffffff, #ffff00 35%, #b4a000 100%);
               border-color: #837700;
+              animation: lamp-pulse .85s ease-in-out infinite alternate;
             }
             .target-panel[data-state="error"] .status-lamp {
               background: radial-gradient(circle at 35% 35%, #ffffff, #ff5555 35%, #a00000 100%);
@@ -342,8 +359,23 @@ public static class UpdatePageRenderer
                 repeating-linear-gradient(45deg, rgba(255,255,255,.28) 0 6px, rgba(255,255,255,0) 6px 12px),
                 linear-gradient(180deg, #2be52b, var(--green));
               height: 100%;
+              min-width: 0;
               transition: width .2s ease;
               width: 0;
+            }
+            .target-panel:not([data-state="working"]) .bar {
+              display: none;
+            }
+            .target-panel[data-state="working"] .bar > div {
+              animation: progress-stripes .7s linear infinite;
+              min-width: 18%;
+            }
+            @keyframes progress-stripes {
+              to { background-position: 24px 0, 0 0; }
+            }
+            @keyframes lamp-pulse {
+              from { filter: brightness(.88); }
+              to { filter: brightness(1.25); }
             }
             .actions {
               display: flex;
@@ -351,6 +383,16 @@ public static class UpdatePageRenderer
               gap: 7px;
               justify-content: flex-end;
               min-width: 0;
+            }
+            .path-row {
+              display: grid;
+              gap: 5px;
+              min-width: 0;
+            }
+            .path-label {
+              color: #333;
+              font-size: 12px;
+              font-weight: bold;
             }
             .side-panel {
               align-self: start;
@@ -423,17 +465,6 @@ public static class UpdatePageRenderer
               color: var(--link);
               font-weight: bold;
             }
-            .card h2 { font-size: 17px; margin: 0; letter-spacing: 0; }
-            .meta { display: grid; gap: 6px; color: var(--muted); }
-            .meta div { display: flex; justify-content: space-between; gap: 14px; border-bottom: 1px solid rgba(255,255,255,.06); padding-bottom: 5px; }
-            .meta span:last-child { color: var(--text); text-align: right; overflow-wrap: anywhere; }
-            .actions { margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; }
-            .message { color: var(--muted); min-height: 22px; }
-            .warning { color: var(--warn); }
-            .error { color: var(--danger); }
-            .bar { height: 8px; background: #11151a; border-radius: 99px; overflow: hidden; border: 1px solid var(--line); }
-            .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .2s ease; }
-            .setup { border-color: rgba(240,198,106,.65); }
             @media (max-width: 860px) {
               body {
                 overflow-x: hidden;
@@ -546,6 +577,26 @@ public static class UpdatePageRenderer
                           </div>
                 </div>
               </article>
+                      <article class="target-panel" id="v1-import-card">
+                        <div class="panel-heading">
+                          <span class="status-lamp" aria-hidden="true"></span>
+                          <img class="panel-icon" src="/_updates/flash-assets/load.png" alt="">
+                <h2>V1 user data import</h2>
+                        </div>
+                        <div class="panel-body">
+                <p class="message" id="v1-import-message">Choose the v1 data folder whose child folders are users.</p>
+                <label class="path-row">
+                  <span class="path-label">Folder path</span>
+                  <input id="v1-import-path" type="text" autocomplete="off" spellcheck="false" placeholder="C:\Users\YourName\Pictures\mgb\data">
+                </label>
+                <div class="meta" id="v1-import-meta"></div>
+                <div class="bar"><div id="v1-import-progress"></div></div>
+                <div class="actions">
+                            <button id="v1-import-scan" type="button"><img class="button-icon" src="/_updates/flash-assets/load.png" alt="">Scan folder</button>
+                            <button class="primary" id="v1-import-start" type="button"><img class="button-icon" src="/_updates/flash-assets/save.png" alt="">Import pieces</button>
+                          </div>
+                </div>
+              </article>
                       <article class="target-panel" id="app-card">
                         <div class="panel-heading">
                           <span class="status-lamp" aria-hidden="true"></span>
@@ -577,6 +628,7 @@ public static class UpdatePageRenderer
             let busy = false;
             let autoChecked = false;
             let frontendPrompted = false;
+            let v1ImportScan = null;
             const targets = {
               app: { title: "App", installPath: "/_updates/app/install", installLabel: "Install app update" },
               s3: { title: "S3 data archive", installPath: "/_updates/archives/s3/install", installLabel: "Install data archive" },
@@ -584,16 +636,26 @@ public static class UpdatePageRenderer
             };
 
             document.getElementById("check").addEventListener("click", () => post("/_updates/check"));
-            document.getElementById("app-install").addEventListener("click", () => post(targets.app.installPath));
+            document.getElementById("app-install").addEventListener("click", () => post(targets.app.installPath, "app"));
             document.getElementById("s3-install").addEventListener("click", () => {
-              if (confirm("The S3 data archive can be a large download and may take a while to install. Continue?")) post(targets.s3.installPath);
+              if (confirm("The S3 data archive can be a large download and may take a while to install. Continue?")) post(targets.s3.installPath, "s3");
             });
-            document.getElementById("frontend-install").addEventListener("click", () => post(targets.frontend.installPath));
+            document.getElementById("frontend-install").addEventListener("click", () => post(targets.frontend.installPath, "frontend"));
+            document.getElementById("v1-import-scan").addEventListener("click", scanV1Import);
+            document.getElementById("v1-import-start").addEventListener("click", importV1Data);
+            document.getElementById("v1-import-path").addEventListener("input", () => {
+              v1ImportScan = null;
+              syncV1ImportControls();
+            });
+            document.getElementById("v1-import-path").addEventListener("keydown", event => {
+              if (event.key === "Enter") scanV1Import();
+            });
 
-            async function post(path) {
+            async function post(path, targetId) {
               if (busy) return;
               busy = true;
               setBusy(true);
+              if (targetId) markStarting(targetId);
               try {
                 const response = await fetch(path, { method: "POST", headers: { "X-MGB-Update-Token": token } });
                 if (!response.ok) throw new Error(await response.text());
@@ -606,17 +668,102 @@ public static class UpdatePageRenderer
               }
             }
 
+            async function scanV1Import() {
+              if (busy) return;
+              busy = true;
+              setBusy(true);
+              markV1ImportWorking("Scanning v1 folder.");
+              try {
+                const response = await postJson("/_updates/v1-import/scan", v1ImportRequest(false));
+                if (!response.ok) throw await responseError(response);
+                v1ImportScan = await response.json();
+                renderV1ImportScan(v1ImportScan);
+              } catch (error) {
+                renderV1ImportError(error.message || String(error));
+              } finally {
+                busy = false;
+                setBusy(false, false);
+              }
+            }
+
+            async function importV1Data() {
+              if (busy) return;
+              busy = true;
+              setBusy(true);
+              markV1ImportWorking("Importing v1 pieces.");
+              try {
+                let response = await postJson("/_updates/v1-import/import", v1ImportRequest(false));
+                if (response.status === 409) {
+                  const payload = await response.json();
+                  if (payload.scan) {
+                    v1ImportScan = payload.scan;
+                    renderV1ImportScan(v1ImportScan);
+                  }
+
+                  if (!confirm("This folder contains more than 100,000 pieces. That usually means the public S3 archive data, which should be installed with the S3 data archive button on this page. Continue only if this folder is your personal v1 user data.")) {
+                    return;
+                  }
+
+                  markV1ImportWorking("Importing confirmed v1 pieces.");
+                  response = await postJson("/_updates/v1-import/import", v1ImportRequest(true));
+                }
+
+                if (!response.ok) throw await responseError(response);
+                renderV1ImportResult(await response.json());
+              } catch (error) {
+                renderV1ImportError(error.message || String(error));
+              } finally {
+                busy = false;
+                setBusy(false, false);
+              }
+            }
+
+            async function postJson(path, body) {
+              return await fetch(path, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-MGB-Update-Token": token,
+                },
+                body: JSON.stringify(body),
+              });
+            }
+
+            function v1ImportRequest(largeImportConfirmed) {
+              return {
+                directoryPath: document.getElementById("v1-import-path").value.trim(),
+                largeImportConfirmed,
+              };
+            }
+
+            async function responseError(response) {
+              const text = await response.text();
+              try {
+                const payload = JSON.parse(text);
+                return new Error(payload.message || text);
+              } catch {
+                return new Error(text || `Request failed with HTTP ${response.status}.`);
+              }
+            }
+
             async function refresh() {
               const response = await fetch("/_updates/status", { cache: "no-store" });
               render(await response.json());
             }
 
             function render(status) {
-              document.getElementById("summary").textContent = status.frontendArchive.missing
-                ? "Install the frontend archive to start playing. The S3 data archive is optional and may be large."
-                : status.s3Archive.missing
-                  ? "Frontend files are installed. The S3 data archive is optional and may be large."
-                  : "Your local files are installed. Updates remain opt-in.";
+              const working = [
+                ["frontend", status.frontendArchive],
+                ["s3", status.s3Archive],
+                ["app", status.app],
+              ].find(([, item]) => item.state === "working");
+              document.getElementById("summary").textContent = working
+                ? `${targets[working[0]].title}: ${working[1].message || "Working..."}`
+                : status.frontendArchive.missing
+                  ? "Install the frontend archive to start playing. The S3 data archive is optional and may be large."
+                  : status.s3Archive.missing
+                    ? "Frontend files are installed. The S3 data archive is optional and may be large."
+                    : "Your local files are installed. Updates remain opt-in.";
               renderTarget("frontend", status.frontendArchive, true);
               renderTarget("s3", status.s3Archive, false);
               renderTarget("app", status.app, false);
@@ -640,6 +787,17 @@ public static class UpdatePageRenderer
               }
             }
 
+            function markStarting(id) {
+              const card = document.getElementById(`${id}-card`);
+              const message = document.getElementById(`${id}-message`);
+              const installLabel = document.getElementById(`${id}-install-label`);
+              card.dataset.state = "working";
+              message.textContent = `Starting ${targets[id].title.toLowerCase()} install.`;
+              document.getElementById(`${id}-progress`).style.width = "2%";
+              installLabel.textContent = "Working...";
+              document.getElementById("summary").textContent = `${targets[id].title}: starting install.`;
+            }
+
             function renderTarget(id, item, primaryMissing) {
               const message = document.getElementById(`${id}-message`);
               const install = document.getElementById(`${id}-install`);
@@ -654,7 +812,7 @@ public static class UpdatePageRenderer
               message.classList.toggle("error", item.state === "error");
               message.classList.toggle("current", current);
               document.getElementById(`${id}-progress`).style.width = `${item.progressPercent || 0}%`;
-              install.disabled = !item.canInstall || item.state === "working" || !item.updateAvailable;
+              install.disabled = busy || !item.canInstall || item.state === "working" || !item.updateAvailable;
               install.title = install.disabled ? disabledReason(item) : "";
               installLabel.textContent = installButtonLabel(id, item);
               document.getElementById(`${id}-meta`).innerHTML = [
@@ -701,14 +859,79 @@ public static class UpdatePageRenderer
               }).join("");
             }
 
-            function setBusy(busy) {
-              document.getElementById("check").disabled = busy;
-              if (busy) {
+            function markV1ImportWorking(message) {
+              const card = document.getElementById("v1-import-card");
+              card.dataset.state = "working";
+              card.dataset.missing = "false";
+              document.getElementById("v1-import-message").textContent = message;
+              document.getElementById("v1-import-message").classList.remove("error", "warning", "current");
+              document.getElementById("v1-import-progress").style.width = "2%";
+              document.getElementById("summary").textContent = `V1 user data import: ${message}`;
+            }
+
+            function renderV1ImportScan(scan) {
+              const card = document.getElementById("v1-import-card");
+              const message = document.getElementById("v1-import-message");
+              card.dataset.state = "idle";
+              card.dataset.missing = "false";
+              message.textContent = scan.message || "Scan complete.";
+              message.classList.toggle("warning", Boolean(scan.requiresArchiveConfirmation));
+              message.classList.remove("error", "current");
+              document.getElementById("v1-import-progress").style.width = "0%";
+              document.getElementById("v1-import-meta").innerHTML = [
+                ["Folder", scan.directoryPath || ""],
+                ["Pieces", scan.scanComplete ? formatCount(scan.pieceCount) : `More than ${formatCount(100000)}`],
+                ["Status", scan.requiresArchiveConfirmation ? "Needs confirmation" : "Ready"],
+              ].map(([label, value]) => `<div><span>${label}</span><span>${escapeHtml(value)}</span></div>`).join("");
+              document.getElementById("summary").textContent = `V1 user data import: ${scan.message || "Scan complete."}`;
+            }
+
+            function renderV1ImportResult(result) {
+              const card = document.getElementById("v1-import-card");
+              const message = document.getElementById("v1-import-message");
+              card.dataset.state = "idle";
+              card.dataset.missing = "false";
+              message.textContent = result.message || "Import complete.";
+              message.classList.toggle("warning", result.skippedCount > 0);
+              message.classList.remove("error", "current");
+              document.getElementById("v1-import-progress").style.width = "100%";
+              document.getElementById("v1-import-meta").innerHTML = [
+                ["Folder", result.directoryPath || ""],
+                ["Found", formatCount(result.foundCount)],
+                ["Imported", formatCount(result.importedCount)],
+                ["Skipped", formatCount(result.skippedCount)],
+                ["Status", result.wasLargeImport ? "Large import complete" : "Complete"],
+              ].map(([label, value]) => `<div><span>${label}</span><span>${escapeHtml(value)}</span></div>`).join("");
+              document.getElementById("summary").textContent = `V1 user data import: ${result.message || "Import complete."}`;
+            }
+
+            function renderV1ImportError(messageText) {
+              const card = document.getElementById("v1-import-card");
+              const message = document.getElementById("v1-import-message");
+              card.dataset.state = "error";
+              card.dataset.missing = "false";
+              message.textContent = messageText;
+              message.classList.add("error");
+              message.classList.remove("warning", "current");
+              document.getElementById("v1-import-progress").style.width = "0%";
+              document.getElementById("summary").textContent = `V1 user data import: ${messageText}`;
+            }
+
+            function setBusy(isBusy, refreshStatus = true) {
+              document.getElementById("check").disabled = isBusy;
+              if (isBusy) {
                 document.getElementById("app-install").disabled = true;
                 document.getElementById("s3-install").disabled = true;
                 document.getElementById("frontend-install").disabled = true;
               }
-              if (!busy) refresh();
+              syncV1ImportControls();
+              if (!isBusy && refreshStatus) refresh();
+            }
+
+            function syncV1ImportControls() {
+              const hasPath = document.getElementById("v1-import-path").value.trim().length > 0;
+              document.getElementById("v1-import-scan").disabled = busy || !hasPath;
+              document.getElementById("v1-import-start").disabled = busy || !hasPath;
             }
 
             function formatBytes(value) {
@@ -719,11 +942,16 @@ public static class UpdatePageRenderer
               return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
             }
 
+            function formatCount(value) {
+              return Number(value || 0).toLocaleString();
+            }
+
             function escapeHtml(value) {
               return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[char]));
             }
 
             refresh();
+            syncV1ImportControls();
             setInterval(refresh, 3000);
           </script>
         </body>

@@ -68,6 +68,48 @@ public static class UpdateEndpoints
                 return Results.Json(coordinator.GetStatus());
             });
 
+        group.MapPost(
+            "/v1-import/scan",
+            async (V1ImportRequest body, HttpRequest request, UpdateSecurityToken token, V1DataImporter importer, CancellationToken cancellationToken) =>
+            {
+                if (!IsAuthorizedPost(request, token))
+                {
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                }
+
+                try
+                {
+                    return Results.Json(await importer.ScanAsync(body.DirectoryPath, cancellationToken).ConfigureAwait(false));
+                }
+                catch (Exception exc) when (IsImportRequestError(exc))
+                {
+                    return Results.BadRequest(new V1ImportError(exc.Message));
+                }
+            });
+
+        group.MapPost(
+            "/v1-import/import",
+            async (V1ImportRequest body, HttpRequest request, UpdateSecurityToken token, V1DataImporter importer, CancellationToken cancellationToken) =>
+            {
+                if (!IsAuthorizedPost(request, token))
+                {
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                }
+
+                try
+                {
+                    return Results.Json(await importer.ImportAsync(body.DirectoryPath, body.LargeImportConfirmed, cancellationToken).ConfigureAwait(false));
+                }
+                catch (V1ImportConfirmationRequiredException exc)
+                {
+                    return Results.Conflict(new V1ImportError(exc.Message, exc.Scan));
+                }
+                catch (Exception exc) when (IsImportRequestError(exc))
+                {
+                    return Results.BadRequest(new V1ImportError(exc.Message));
+                }
+            });
+
         return app;
     }
 
@@ -97,4 +139,7 @@ public static class UpdateEndpoints
         return string.Equals(uri.Scheme, request.Scheme, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(uri.Authority, request.Host.Value, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsImportRequestError(Exception exception) =>
+        exception is ArgumentException or DirectoryNotFoundException or IOException or UnauthorizedAccessException;
 }
