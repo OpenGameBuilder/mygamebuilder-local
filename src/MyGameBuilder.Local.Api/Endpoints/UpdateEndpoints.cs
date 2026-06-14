@@ -20,6 +20,8 @@ public static class UpdateEndpoints
 
         var group = app.MapGroup("/_updates").RequireCors(CorsPolicyName);
 
+        group.MapGet("/flash-assets/{fileName}", UpdatePageAssets.Serve);
+
         group.MapGet("/status", (UpdateCoordinator coordinator) => Results.Json(coordinator.GetStatus()));
 
         group.MapPost(
