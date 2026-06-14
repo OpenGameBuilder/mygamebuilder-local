@@ -6,18 +6,22 @@ namespace MyGameBuilder.Local.Api.Updates;
 public sealed class UpdateBackgroundService : BackgroundService
 {
     private readonly UpdateCoordinator _coordinator;
+    private readonly UpdateConsoleNotifier _consoleNotifier;
     private readonly IOptions<UpdateOptions> _options;
     private readonly ILogger<UpdateBackgroundService> _logger;
 
     public UpdateBackgroundService(
         UpdateCoordinator coordinator,
+        UpdateConsoleNotifier consoleNotifier,
         IOptions<UpdateOptions> options,
         ILogger<UpdateBackgroundService> logger)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
+        ArgumentNullException.ThrowIfNull(consoleNotifier);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
         _coordinator = coordinator;
+        _consoleNotifier = consoleNotifier;
         _options = options;
         _logger = logger;
     }
@@ -35,6 +39,7 @@ public sealed class UpdateBackgroundService : BackgroundService
             if (!stoppingToken.IsCancellationRequested)
             {
                 await CheckSafelyAsync(stoppingToken).ConfigureAwait(false);
+                _consoleNotifier.WriteAvailableUpdatesOnce(_coordinator.GetStatus());
             }
         }
 
@@ -43,6 +48,7 @@ public sealed class UpdateBackgroundService : BackgroundService
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
         {
             await CheckSafelyAsync(stoppingToken).ConfigureAwait(false);
+            _consoleNotifier.WriteAvailableUpdatesOnce(_coordinator.GetStatus());
         }
     }
 

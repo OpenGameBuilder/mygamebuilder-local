@@ -98,31 +98,36 @@ public static class WebApplicationExtensions
 
             Console.WriteLine();
             WriteCentered("============================================================", ConsoleColor.DarkCyan);
-            WriteCentered("MYGAMEBUILDER LOCAL IS READY", ConsoleColor.Cyan);
-            WriteCentered("Open this link in your browser:", ConsoleColor.Gray);
-            WriteCentered(baseUrl + "/", ConsoleColor.Yellow);
-            WriteCentered($"Frontend archive date: {configuredFrontendDateTime}", ConsoleColor.Gray);
-            WriteCentered(
-                missingPieceArchive
-                    ? "Log in as guest with any password."
-                    : "Log in as any user with any password.",
-                ConsoleColor.Gray);
-            WriteCentered("Press Ctrl+C when you are done.", ConsoleColor.DarkGray);
-            WriteCentered("============================================================", ConsoleColor.DarkCyan);
-
-            if (missingPieceArchive)
-            {
-                Console.WriteLine();
-                WriteCentered("No saved user archive was found yet; guest mode is available.", ConsoleColor.DarkGray);
-            }
-
             if (missingFrontendArchive)
             {
-                Console.WriteLine();
-                WriteCentered("frontend.sqlite was not found; setup instructions will appear in the browser.", ConsoleColor.Yellow);
+                WriteCentered("MYGAMEBUILDER LOCAL SETUP NEEDED", ConsoleColor.Yellow);
+                WriteCentered("frontend.sqlite was not found.", ConsoleColor.Red);
+                WriteCentered("Open the updates page to install the frontend files:", ConsoleColor.Gray);
+                WriteCentered($"{baseUrl}/updates", ConsoleColor.Yellow);
+                WriteCentered("============================================================", ConsoleColor.DarkCyan);
+            }
+            else
+            {
+                WriteCentered("MYGAMEBUILDER LOCAL IS READY", ConsoleColor.Cyan);
+                WriteCentered("Open this link in your browser:", ConsoleColor.Gray);
+                WriteCentered(baseUrl + "/", ConsoleColor.Yellow);
+                WriteCentered($"Frontend archive date: {configuredFrontendDateTime}", ConsoleColor.Gray);
+                WriteCentered(
+                    missingPieceArchive
+                        ? "Log in as guest with any password."
+                        : "Log in as any user with any password.",
+                    ConsoleColor.Gray);
+                WriteCentered("Press Ctrl+C when you are done.", ConsoleColor.DarkGray);
+                WriteCentered("============================================================", ConsoleColor.DarkCyan);
+
+                if (missingPieceArchive)
+                {
+                    Console.WriteLine();
+                    WriteCentered("No saved user archive was found yet; guest mode is available.", ConsoleColor.DarkGray);
+                }
             }
 
-            if (frontendDateIsBeforeDefault)
+            if (!missingFrontendArchive && frontendDateIsBeforeDefault)
             {
                 Console.WriteLine();
                 WriteCentered("WARNING: This frontend archive date is older than May 3, 2017.", ConsoleColor.Yellow);

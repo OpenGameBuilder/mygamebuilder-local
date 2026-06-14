@@ -11,12 +11,16 @@ public static class UpdateEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
 
+        app.MapGet("/_updates", () => Results.Redirect("/updates", permanent: false));
+
         app.MapGet(
-            "/_updates",
+            "/updates",
             (UpdateSecurityToken token) => Results.Text(UpdatePageRenderer.BuildUpdatePage(token.Value), "text/html", Encoding.UTF8))
             .RequireCors(CorsPolicyName);
 
         var group = app.MapGroup("/_updates").RequireCors(CorsPolicyName);
+
+        group.MapGet("/flash-assets/{fileName}", UpdatePageAssets.Serve);
 
         group.MapGet("/status", (UpdateCoordinator coordinator) => Results.Json(coordinator.GetStatus()));
 

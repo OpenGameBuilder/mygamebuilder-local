@@ -57,6 +57,21 @@ public sealed class UpdateTests
     }
 
     [Fact]
+    public async Task UpdatesPage_ServesUpdateChecker()
+    {
+        using var pieces = new TempArchive();
+        using var factory = new BackendFactory(pieces);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/updates");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("MyGameBuilder Local updates", body);
+        Assert.Contains("/_updates/status", body);
+    }
+
+    [Fact]
     public async Task UpdatePost_WithoutToken_IsForbidden()
     {
         using var pieces = new TempArchive();

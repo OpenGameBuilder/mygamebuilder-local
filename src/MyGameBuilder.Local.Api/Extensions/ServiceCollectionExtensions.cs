@@ -87,6 +87,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ArchiveUpdateInstaller>();
         services.AddSingleton<AppUpdateInstaller>();
         services.AddSingleton<UpdateCoordinator>();
+        services.AddSingleton<UpdateConsoleNotifier>();
         services.AddHostedService<UpdateBackgroundService>();
         services.AddSingleton<AccountStore>();
         services.AddSingleton<GameStatStore>();

@@ -28,4 +28,10 @@
     <PackageReference Include="ZstdSharp.Port" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Updates\FlashAssets\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

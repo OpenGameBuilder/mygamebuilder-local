@@ -28,6 +28,7 @@ public static class FrontendEndpoints
             async (
                 HttpRequest request,
                 FrontendArchiveStore frontendArchive,
+                UpdateSecurityToken updateToken,
                 CancellationToken cancellationToken) =>
         {
             if (frontendArchive.IsMissing)
@@ -66,6 +67,7 @@ public static class FrontendEndpoints
                 string? path,
                 HttpRequest request,
                 FrontendArchiveStore frontendArchive,
+                UpdateSecurityToken updateToken,
                 CancellationToken cancellationToken) =>
         {
             if (frontendArchive.IsMissing)
@@ -105,6 +107,7 @@ public static class FrontendEndpoints
                 string? path,
                 HttpRequest request,
                 FrontendArchiveStore frontendArchive,
+                UpdateSecurityToken updateToken,
                 CancellationToken cancellationToken) =>
         {
             if (frontendArchive.IsMissing)
@@ -128,7 +131,7 @@ public static class FrontendEndpoints
     private static IResult Html(string content) => Results.Text(content, "text/html", Encoding.UTF8);
 
     private static IResult MissingFrontendArchive(string archivePath) =>
-        Results.Text(UpdatePageRenderer.BuildSetupPrompt(archivePath), "text/html", Encoding.UTF8, StatusCodes.Status503ServiceUnavailable);
+        Results.Text(UpdatePageRenderer.BuildMissingFrontendArchivePage(archivePath), "text/html", Encoding.UTF8, StatusCodes.Status503ServiceUnavailable);
 
     private static IResult FrontendAsset(string path, HttpRequest request, FrontendArchiveAsset asset)
     {
