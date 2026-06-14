@@ -21,8 +21,19 @@ env:
 
 jobs:
   build-test:
-    name: Build and test
-    runs-on: ubuntu-latest
+    name: Build and test (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu
+            runner: ubuntu-latest
+          - name: Windows
+            runner: windows-latest
+          - name: macOS
+            runner: macos-26
 
     steps:
       - name: Checkout
@@ -34,13 +45,17 @@ jobs:
           global-json-file: global.json
 
       - name: Restore tools
+        shell: pwsh
         run: dotnet tool restore
 
       - name: Restore
+        shell: pwsh
         run: dotnet restore mygamebuilder-local.slnx
 
       - name: Build
+        shell: pwsh
         run: dotnet build mygamebuilder-local.slnx --configuration Release --no-restore
 
       - name: Test
+        shell: pwsh
         run: dotnet test mygamebuilder-local.slnx --configuration Release --no-build

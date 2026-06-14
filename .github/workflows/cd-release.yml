@@ -55,10 +55,37 @@ jobs:
           SOURCE_REF: ${{ inputs.ref }}
         run: bash ./scripts/validate-release.sh
 
-  release:
-    name: Build, package, tag, and release
+  package:
+    name: Build, smoke, and package (${{ matrix.rid }})
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-latest
+            archive_ext: zip
+            executable: mygamebuilder-local.exe
+          - rid: linux-x64
+            runner: ubuntu-latest
+            archive_ext: tar.gz
+            executable: mygamebuilder-local
+          - rid: osx-x64
+            runner: macos-26-intel
+            archive_ext: tar.gz
+            executable: mygamebuilder-local
+          - rid: osx-arm64
+            runner: macos-26
+            archive_ext: tar.gz
+            executable: mygamebuilder-local
+
+    env:
+      RID: ${{ matrix.rid }}
+      ARCHIVE_EXT: ${{ matrix.archive_ext }}
+      EXECUTABLE: ${{ matrix.executable }}
+      VERSION: ${{ needs.validate.outputs.version }}
 
     steps:
       - name: Checkout
@@ -73,48 +100,223 @@ jobs:
           global-json-file: global.json
 
       - name: Restore tools
+        shell: pwsh
         run: dotnet tool restore
 
       - name: Restore
-        run: dotnet restore "${SOLUTION}"
+        shell: pwsh
+        run: dotnet restore $env:SOLUTION
 
       - name: Build
-        run: dotnet build "${SOLUTION}" --configuration Release --no-restore
+        shell: pwsh
+        run: dotnet build $env:SOLUTION --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test "${SOLUTION}" --configuration Release --no-build
+        shell: pwsh
+        run: dotnet test $env:SOLUTION --configuration Release --no-build
 
-      - name: Publish release archives
+      - name: Publish
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $output = Join-Path "artifacts/publish" $env:RID
+          New-Item -ItemType Directory -Force -Path $output | Out-Null
+
+          dotnet publish $env:PROJECT `
+            --configuration Release `
+            --runtime $env:RID `
+            --self-contained true `
+            --output $output `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=none `
+            -p:DebugSymbols=false
+
+      - name: Add package README
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $output = Join-Path "artifacts/publish" $env:RID
+          $readme = @"
+          MyGameBuilder Local $env:VERSION ($env:RID)
+
+          Run:
+            Windows: .\mygamebuilder-local.exe
+            macOS/Linux: ./mygamebuilder-local
+
+          Open http://127.0.0.1:3000 after startup.
+
+          Optional local data:
+            archive.sqlite        read-only piece archive next to the executable
+            frontend/MGB.swf      Flash client and supporting frontend assets
+
+          GitHub Release archives intentionally do not bundle legacy client,
+          frontend, archive, or overlay data. The app creates overlay.sqlite
+          next to the executable for local writes.
+          "@
+          $readme = $readme -replace "(?m)^          ", ""
+          Set-Content -Path (Join-Path $output "README.txt") -Value $readme -Encoding UTF8
+
+      - name: Smoke test published app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $output = Join-Path "artifacts/publish" $env:RID
+          $exe = Join-Path $output $env:EXECUTABLE
+          if (-not (Test-Path $exe)) {
+            throw "Published executable was not found: $exe"
+          }
+
+          if ($env:RID -ne "win-x64") {
+            chmod +x $exe
+          }
+
+          $stdout = Join-Path $env:RUNNER_TEMP "mygamebuilder-local-$env:RID.out.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "mygamebuilder-local-$env:RID.err.log"
+          $process = $null
+          $launchToken = "release-smoke-$env:RID-$([Guid]::NewGuid().ToString('N'))"
+          $env:MGB_LAUNCH_TOKEN = $launchToken
+
+          try {
+            $process = Start-Process -FilePath $exe -WorkingDirectory $output -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+            $deadline = (Get-Date).AddSeconds(45)
+            $healthy = $false
+
+            while ((Get-Date) -lt $deadline) {
+              if ($process.HasExited) {
+                throw "Published app exited before the health check completed with code $($process.ExitCode)."
+              }
+
+              try {
+                $body = (Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:3000/healthz" -TimeoutSec 2).Content
+                if ($body.Trim() -eq $launchToken) {
+                  $healthy = $true
+                  break
+                }
+              } catch {
+                Start-Sleep -Seconds 1
+              }
+            }
+
+            if (-not $healthy) {
+              throw "Health check did not return the release smoke token before the timeout."
+            }
+
+            $overlay = Join-Path $output "overlay.sqlite"
+            if (-not (Test-Path $overlay)) {
+              throw "Smoke test did not observe overlay.sqlite creation."
+            }
+          } catch {
+            Write-Host "::group::published app stdout"
+            if (Test-Path $stdout) { Get-Content $stdout }
+            Write-Host "::endgroup::"
+            Write-Host "::group::published app stderr"
+            if (Test-Path $stderr) { Get-Content $stderr }
+            Write-Host "::endgroup::"
+            throw
+          } finally {
+            if ($process -and -not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+              $process.WaitForExit(5000) | Out-Null
+            }
+          }
+
+      - name: Verify release contents
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $output = Join-Path "artifacts/publish" $env:RID
+          Get-ChildItem -Path $output -Filter "overlay.sqlite*" -Force | Remove-Item -Force
+          foreach ($directory in @("archive", "data", "frontend")) {
+            $path = Join-Path $output $directory
+            if (Test-Path $path) {
+              Remove-Item -Path $path -Recurse -Force
+            }
+          }
+
+          foreach ($forbidden in @("archive.sqlite", "overlay.sqlite", "archive", "data", "frontend")) {
+            $path = Join-Path $output $forbidden
+            if (Test-Path $path) {
+              throw "Release package must not include $forbidden."
+            }
+          }
+
+          if (-not (Test-Path (Join-Path $output "README.txt"))) {
+            throw "Release package README.txt is missing."
+          }
+
+      - name: Create archive
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $output = Join-Path "artifacts/publish" $env:RID
+          $dist = "artifacts/dist"
+          $archiveName = "mygamebuilder-local-$env:VERSION-$env:RID.$env:ARCHIVE_EXT"
+          $archivePath = Join-Path $dist $archiveName
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+
+          if ($env:ARCHIVE_EXT -eq "zip") {
+            Compress-Archive -Path (Join-Path $output "*") -DestinationPath $archivePath -Force
+          } else {
+            tar -C $output -czf $archivePath .
+          }
+
+          if (-not (Test-Path $archivePath)) {
+            throw "Expected archive was not created: $archivePath"
+          }
+
+      - name: Upload release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.rid }}
+          path: artifacts/dist/mygamebuilder-local-${{ needs.validate.outputs.version }}-${{ matrix.rid }}.${{ matrix.archive_ext }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Tag and publish release
+    needs:
+      - validate
+      - package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+          fetch-depth: 0
+
+      - name: Download release archives
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Verify release archives
         env:
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
           set -euo pipefail
 
-          mkdir -p artifacts/dist
+          expected=(
+            "mygamebuilder-local-${VERSION}-win-x64.zip"
+            "mygamebuilder-local-${VERSION}-linux-x64.tar.gz"
+            "mygamebuilder-local-${VERSION}-osx-x64.tar.gz"
+            "mygamebuilder-local-${VERSION}-osx-arm64.tar.gz"
+          )
 
-          for rid in win-x64 linux-x64 osx-x64 osx-arm64; do
-            output="artifacts/publish/${rid}"
-            archive_name="mygamebuilder-local-${VERSION}-${rid}"
-
-            dotnet publish "${PROJECT}" \
-              --configuration Release \
-              --runtime "${rid}" \
-              --self-contained true \
-              --output "${output}" \
-              -p:PublishSingleFile=true \
-              -p:IncludeNativeLibrariesForSelfExtract=true \
-              -p:EnableCompressionInSingleFile=true \
-              -p:DebugType=none \
-              -p:DebugSymbols=false
-
-            if [ "${rid}" = "win-x64" ]; then
-              (cd "${output}" && zip -9 -r "../../dist/${archive_name}.zip" .)
-            else
-              tar -C "${output}" -czf "artifacts/dist/${archive_name}.tar.gz" .
-            fi
+          for asset in "${expected[@]}"; do
+            test -f "artifacts/dist/${asset}" || {
+              echo "Missing release asset: ${asset}" >&2
+              exit 1
+            }
           done
 
-          (cd artifacts/dist && sha256sum * | sort -k2 > SHA256SUMS.txt)
+          find artifacts/dist -maxdepth 1 -type f -print | sort
+          (cd artifacts/dist && sha256sum "${expected[@]}" | sort -k2 > SHA256SUMS.txt)
 
       - name: Create tag and GitHub Release
         env:
@@ -160,4 +362,3 @@ jobs:
           TAG: ${{ needs.validate.outputs.tag }}
           NEXT_MAIN_VERSION: ${{ needs.validate.outputs.next_main_version }}
         run: bash ./scripts/post-release.sh
-
