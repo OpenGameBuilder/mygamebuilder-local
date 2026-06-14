@@ -416,6 +416,17 @@ public static class UpdatePageRenderer
               color: var(--link);
               font-weight: bold;
             }
+            .card h2 { font-size: 17px; margin: 0; letter-spacing: 0; }
+            .meta { display: grid; gap: 6px; color: var(--muted); }
+            .meta div { display: flex; justify-content: space-between; gap: 14px; border-bottom: 1px solid rgba(255,255,255,.06); padding-bottom: 5px; }
+            .meta span:last-child { color: var(--text); text-align: right; overflow-wrap: anywhere; }
+            .actions { margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+            .message { color: var(--muted); min-height: 22px; }
+            .warning { color: var(--warn); }
+            .error { color: var(--danger); }
+            .bar { height: 8px; background: #11151a; border-radius: 99px; overflow: hidden; border: 1px solid var(--line); }
+            .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .2s ease; }
+            .setup { border-color: rgba(240,198,106,.65); }
             @media (max-width: 860px) {
               body {
                 overflow-x: hidden;
@@ -491,9 +502,9 @@ public static class UpdatePageRenderer
             <main class="client-area">
               <section class="window">
                 <div class="window-title">
-                  <h1>MyGameBuilder Local updates</h1>
+                <h1>MyGameBuilder Local updates</h1>
                   <button id="check" type="button"><img class="button-icon" src="/_updates/flash-assets/load.png" alt="">Check now</button>
-                </div>
+              </div>
                 <div class="window-body">
                   <p class="tutorial-clue" id="summary">Checking local setup and available releases.</p>
                   <div class="update-layout">
@@ -502,48 +513,48 @@ public static class UpdatePageRenderer
                         <div class="panel-heading">
                           <span class="status-lamp" aria-hidden="true"></span>
                           <img class="panel-icon" src="/_updates/flash-assets/load.png" alt="">
-                          <h2>Frontend files</h2>
+                <h2>Frontend files</h2>
                         </div>
                         <div class="panel-body">
                           <p class="message" id="frontend-message">frontend.sqlite is missing or ready to update.</p>
-                          <div class="meta" id="frontend-meta"></div>
-                          <div class="bar"><div id="frontend-progress"></div></div>
-                          <div class="actions">
+                <div class="meta" id="frontend-meta"></div>
+                <div class="bar"><div id="frontend-progress"></div></div>
+                <div class="actions">
                             <button class="primary" id="frontend-install" type="button"><img class="button-icon" src="/_updates/flash-assets/save.png" alt="">Install frontend</button>
                           </div>
-                        </div>
-                      </article>
+                </div>
+              </article>
                       <article class="target-panel" id="s3-card">
                         <div class="panel-heading">
                           <span class="status-lamp" aria-hidden="true"></span>
                           <img class="panel-icon" src="/_updates/flash-assets/save.png" alt="">
-                          <h2>S3 data archive</h2>
+                <h2>S3 data archive</h2>
                         </div>
                         <div class="panel-body">
-                          <p class="message warning" id="s3-message"></p>
-                          <div class="meta" id="s3-meta"></div>
-                          <div class="bar"><div id="s3-progress"></div></div>
-                          <div class="actions">
+                <p class="message warning" id="s3-message"></p>
+                <div class="meta" id="s3-meta"></div>
+                <div class="bar"><div id="s3-progress"></div></div>
+                <div class="actions">
                             <button id="s3-install" type="button"><img class="button-icon" src="/_updates/flash-assets/save.png" alt="">Install data archive</button>
                           </div>
-                        </div>
-                      </article>
+                </div>
+              </article>
                       <article class="target-panel" id="app-card">
                         <div class="panel-heading">
                           <span class="status-lamp" aria-hidden="true"></span>
                           <img class="panel-icon" src="/_updates/flash-assets/play.png" alt="">
-                          <h2>App</h2>
+                <h2>App</h2>
                         </div>
                         <div class="panel-body">
-                          <p class="message" id="app-message"></p>
-                          <div class="meta" id="app-meta"></div>
-                          <div class="bar"><div id="app-progress"></div></div>
-                          <div class="actions">
+                <p class="message" id="app-message"></p>
+                <div class="meta" id="app-meta"></div>
+                <div class="bar"><div id="app-progress"></div></div>
+                <div class="actions">
                             <button id="app-install" type="button"><img class="button-icon" src="/_updates/flash-assets/play.png" alt="">Install app update</button>
                           </div>
-                        </div>
-                      </article>
-                    </section>
+                </div>
+              </article>
+            </section>
                     <aside class="side-panel" aria-label="Update event log">
                       <div class="side-heading">Network and Event log</div>
                       <div class="event-grid" id="event-log"></div>
@@ -552,7 +563,7 @@ public static class UpdatePageRenderer
                   </div>
                 </div>
               </section>
-            </main>
+          </main>
           </div>
           <script>
             const token = "__CSRF_TOKEN__";
@@ -714,7 +725,7 @@ public static class UpdatePageRenderer
                   <p><a href="/updates">Open the updates page</a> to install the latest frontend archive. You can also optionally install the S3 data archive there; it is a large download and may take a while.</p>
                 </div>
               </section>
-            </main>
+          </main>
           </div>
         </body>
         </html>
