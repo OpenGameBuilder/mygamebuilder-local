@@ -1,5 +1,8 @@
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.Logging.Abstractions;
+using MyGameBuilder.Local.Api.Configuration;
+using MyGameBuilder.Local.Api.Frontend;
 
 namespace MyGameBuilder.Local.Api.Tests;
 
@@ -351,13 +354,15 @@ public sealed class FrontendEndpointsTests
     }
 
     [Fact]
-    public void Startup_WithUnsupportedFrontendArchiveSchema_FailsClearly()
+    public async Task Startup_WithUnsupportedFrontendArchiveSchema_FailsClearly()
     {
         using var pieces = new TempArchive();
         using var frontend = new TempFrontendArchive(schema: "mgb-jgi-test1-unversioned-archive");
-        using var factory = new BackendFactory(pieces, frontend.ArchivePath);
+        var archive = new FrontendArchiveStore(frontend.ArchivePath, FrontendOptions.DefaultCaptureDateTime);
+        var initializer = new FrontendArchiveInitializer(archive, NullLogger<FrontendArchiveInitializer>.Instance);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => initializer.StartAsync(CancellationToken.None));
 
         Assert.Contains("Unsupported frontend archive schema", ex.ToString());
         Assert.Contains("mgb-frontend-wayback-archive", ex.ToString());

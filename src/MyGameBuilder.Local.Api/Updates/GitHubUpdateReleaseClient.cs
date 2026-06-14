@@ -10,8 +10,9 @@ namespace MyGameBuilder.Local.Api.Updates;
 public sealed class GitHubUpdateReleaseClient : IUpdateReleaseClient
 {
     private const string AppTagPrefix = "v";
-    private const string S3ArchiveTagPrefix = "s3-v";
-    private const string FrontendArchiveTagPrefix = "frontend-v";
+    private const string ArchiveTagPrefix = "v";
+    private const string S3ArchiveTagSuffix = "-s3";
+    private const string FrontendArchiveTagSuffix = "-client";
     private const string AppManifestName = "mygamebuilder-local-release.json";
     private const string ArchiveManifestName = "mgb-archive-manifest.json";
 
@@ -41,11 +42,11 @@ public sealed class GitHubUpdateReleaseClient : IUpdateReleaseClient
 
     public async Task<UpdateRelease?> GetLatestReleaseAsync(UpdateTarget target, CancellationToken cancellationToken)
     {
-        var (repo, tagPrefix, manifestName) = target switch
+        var (repo, tagPrefix, tagSuffix, manifestName) = target switch
         {
-            UpdateTarget.App => (_options.Value.AppRepository, AppTagPrefix, AppManifestName),
-            UpdateTarget.S3Archive => (_options.Value.ArchiveRepository, S3ArchiveTagPrefix, ArchiveManifestName),
-            UpdateTarget.FrontendArchive => (_options.Value.ArchiveRepository, FrontendArchiveTagPrefix, ArchiveManifestName),
+            UpdateTarget.App => (_options.Value.AppRepository, AppTagPrefix, string.Empty, AppManifestName),
+            UpdateTarget.S3Archive => (_options.Value.ArchiveRepository, ArchiveTagPrefix, S3ArchiveTagSuffix, ArchiveManifestName),
+            UpdateTarget.FrontendArchive => (_options.Value.ArchiveRepository, ArchiveTagPrefix, FrontendArchiveTagSuffix, ArchiveManifestName),
             _ => throw new ArgumentOutOfRangeException(nameof(target), target, null),
         };
 
@@ -54,33 +55,51 @@ public sealed class GitHubUpdateReleaseClient : IUpdateReleaseClient
             .OrderByLatest(
                 releases.Where(release => _options.Value.IncludePrereleases || (!release.Draft && !release.Prerelease)),
                 static release => release.TagName,
-                tagPrefix);
+                tagPrefix,
+                tagSuffix);
 
         foreach (var release in candidates)
         {
             var assets = release.Assets
-                .Select(static asset => new GithubReleaseAsset(asset.Name, asset.BrowserDownloadUrl, asset.Size))
+                .Select(static asset => new GithubReleaseAsset(
+                    asset.Name,
+                    asset.BrowserDownloadUrl,
+                    asset.Size,
+                    TryGetSha256Digest(asset.Digest)))
                 .ToDictionary(static asset => asset.Name, StringComparer.Ordinal);
-            if (!assets.TryGetValue(manifestName, out var manifestAsset))
+            if (!UpdateReleaseSelector.TryParseTaggedVersion(release.TagName, tagPrefix, tagSuffix, out _, out var tagVersion))
             {
-                _logger.LogWarning(
-                    "Ignoring update release {Tag}: missing manifest asset {ManifestName}.",
-                    release.TagName,
-                    manifestName);
                 continue;
             }
 
             try
             {
-                var manifestJson = await GetStringAsync(manifestAsset.DownloadUrl, cancellationToken).ConfigureAwait(false);
-                var manifest = target == UpdateTarget.App
-                    ? (object)ReadAppManifest(manifestJson, release.TagName)
-                    : ReadArchiveManifest(manifestJson, target, release.TagName);
+                object manifest;
+                if (assets.TryGetValue(manifestName, out var manifestAsset))
+                {
+                    var manifestJson = await GetStringAsync(manifestAsset.DownloadUrl, cancellationToken).ConfigureAwait(false);
+                    manifest = target == UpdateTarget.App
+                        ? ReadAppManifest(manifestJson, release.TagName)
+                        : ReadArchiveManifest(manifestJson, target, release.TagName);
+                }
+                else if (target is UpdateTarget.S3Archive or UpdateTarget.FrontendArchive)
+                {
+                    manifest = BuildArchiveManifestFromReleaseAssets(target, release.TagName, tagVersion, assets);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Ignoring update release {Tag}: missing manifest asset {ManifestName}.",
+                        release.TagName,
+                        manifestName);
+                    continue;
+                }
+
                 var version = manifest switch
                 {
                     AppReleaseManifest app => app.Version,
                     ArchiveReleaseManifest archive => archive.Version,
-                    _ => release.TagName[tagPrefix.Length..],
+                    _ => tagVersion,
                 };
                 return new UpdateRelease(
                     target,
@@ -102,6 +121,132 @@ public sealed class GitHubUpdateReleaseClient : IUpdateReleaseClient
         }
 
         return null;
+    }
+
+    private static ArchiveReleaseManifest BuildArchiveManifestFromReleaseAssets(
+        UpdateTarget target,
+        string tag,
+        string version,
+        IReadOnlyDictionary<string, GithubReleaseAsset> assets)
+    {
+        var (kind, targetFileName) = target switch
+        {
+            UpdateTarget.S3Archive => ("s3", "archive.sqlite"),
+            UpdateTarget.FrontendArchive => ("frontend", "frontend.sqlite"),
+            _ => throw new ArgumentOutOfRangeException(nameof(target), target, null),
+        };
+
+        var selectedAssets = SelectArchiveAssets(targetFileName, assets);
+        if (selectedAssets.Count == 0)
+        {
+            throw new InvalidOperationException($"Archive release {tag} did not include assets for {targetFileName}.");
+        }
+
+        if (selectedAssets.Any(static asset => string.IsNullOrWhiteSpace(asset.Asset.Sha256)))
+        {
+            throw new InvalidOperationException($"Archive release {tag} included asset(s) without GitHub SHA-256 digests.");
+        }
+
+        var sqliteSha256 = selectedAssets.Count == 1 &&
+            string.Equals(selectedAssets[0].Asset.Name, targetFileName, StringComparison.Ordinal)
+                ? selectedAssets[0].Asset.Sha256!
+                : string.Empty;
+
+        return new ArchiveReleaseManifest(
+            kind,
+            version,
+            tag,
+            targetFileName,
+            sqliteSha256,
+            selectedAssets.Count == 1 && !string.IsNullOrEmpty(sqliteSha256) ? selectedAssets[0].Asset.SizeBytes : 0,
+            selectedAssets
+                .Select(static item => new ArchiveReleaseAsset(
+                    item.Asset.Name,
+                    item.Asset.Sha256!,
+                    item.Asset.SizeBytes,
+                    item.Order))
+                .ToArray());
+    }
+
+    private static IReadOnlyList<(GithubReleaseAsset Asset, int Order)> SelectArchiveAssets(
+        string targetFileName,
+        IReadOnlyDictionary<string, GithubReleaseAsset> assets)
+    {
+        if (assets.TryGetValue(targetFileName, out var directSqlite))
+        {
+            return [(directSqlite, 0)];
+        }
+
+        var zstdName = targetFileName + ".zst";
+        if (assets.TryGetValue(zstdName, out var directZstd))
+        {
+            return [(directZstd, 0)];
+        }
+
+        var zstdParts = SelectArchivePartAssets(targetFileName + ".zst.part-", assets);
+        if (zstdParts.Count > 0)
+        {
+            return zstdParts;
+        }
+
+        return SelectArchivePartAssets(targetFileName + ".part-", assets);
+    }
+
+    private static IReadOnlyList<(GithubReleaseAsset Asset, int Order)> SelectArchivePartAssets(
+        string partPrefix,
+        IReadOnlyDictionary<string, GithubReleaseAsset> assets)
+    {
+        var parts = assets.Values
+            .Select(asset => (Asset: asset, Order: TryParsePartOrder(asset.Name, partPrefix)))
+            .Where(static item => item.Order is not null)
+            .Select(static item => (item.Asset, Order: item.Order!.Value))
+            .OrderBy(static item => item.Order)
+            .ToArray();
+        if (parts.Length == 0)
+        {
+            return [];
+        }
+
+        for (var index = 0; index < parts.Length; index++)
+        {
+            if (parts[index].Order != index)
+            {
+                throw new InvalidOperationException($"Archive release parts with prefix {partPrefix} are not contiguous. Missing part index {index:000}.");
+            }
+        }
+
+        return parts;
+    }
+
+    private static int? TryParsePartOrder(string assetName, string partPrefix)
+    {
+        if (!assetName.StartsWith(partPrefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var suffix = assetName[partPrefix.Length..];
+        return int.TryParse(
+            suffix,
+            System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var order) && order >= 0
+                ? order
+                : null;
+    }
+
+    private static string? TryGetSha256Digest(string? digest)
+    {
+        const string Prefix = "sha256:";
+        if (digest is null || !digest.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var sha256 = digest[Prefix.Length..];
+        return sha256.Length == 64 && sha256.All(static c => Uri.IsHexDigit(c))
+            ? sha256.ToLowerInvariant()
+            : null;
     }
 
     public async Task DownloadAssetAsync(
@@ -275,5 +420,6 @@ public sealed class GitHubUpdateReleaseClient : IUpdateReleaseClient
     private sealed record GithubReleaseAssetDto(
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("browser_download_url")] Uri BrowserDownloadUrl,
-        [property: JsonPropertyName("size")] long Size);
+        [property: JsonPropertyName("size")] long Size,
+        [property: JsonPropertyName("digest")] string? Digest);
 }

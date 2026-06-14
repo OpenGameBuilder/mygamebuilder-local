@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
@@ -25,6 +26,107 @@ public sealed class UpdateTests
             "s3-v");
 
         Assert.Equal(["s3-v0.3.0", "s3-v0.2.1", "s3-v0.1.0"], ordered);
+    }
+
+    [Fact]
+    public void ReleaseSelector_OrdersSuffixedSemverTagsNewestFirst()
+    {
+        var ordered = UpdateReleaseSelector.OrderByLatest(
+            ["v0.1.0-s3", "v0.3.0-s3", "v9.9.9", "v0.2.1-s3", "v0.2.0-client"],
+            static tag => tag,
+            "v",
+            "-s3");
+
+        Assert.Equal(["v0.3.0-s3", "v0.2.1-s3", "v0.1.0-s3"], ordered);
+    }
+
+    [Fact]
+    public async Task GitHubReleaseClient_UsesArchiveSuffixTagsAndAssetDigestFallback()
+    {
+        const string releaseJson =
+            """
+            [
+              {
+                "tag_name": "v1.0.0-client",
+                "name": "Frontend Archive v1.0.0",
+                "html_url": "https://github.com/OpenGameBuilder/mygamebuilder-archive/releases/tag/v1.0.0-client",
+                "draft": false,
+                "prerelease": false,
+                "assets": [
+                  {
+                    "name": "frontend.sqlite",
+                    "browser_download_url": "https://example.test/frontend.sqlite",
+                    "size": 10,
+                    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                  }
+                ]
+              },
+              {
+                "tag_name": "v1.1.0-client",
+                "name": "Frontend Archive v1.1.0",
+                "html_url": "https://github.com/OpenGameBuilder/mygamebuilder-archive/releases/tag/v1.1.0-client",
+                "draft": false,
+                "prerelease": false,
+                "assets": [
+                  {
+                    "name": "frontend.sqlite",
+                    "browser_download_url": "https://example.test/frontend-v1.1.0.sqlite",
+                    "size": 20,
+                    "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                  }
+                ]
+              },
+              {
+                "tag_name": "v1.0.0-s3",
+                "name": "S3 Data Archive v1.0.0",
+                "html_url": "https://github.com/OpenGameBuilder/mygamebuilder-archive/releases/tag/v1.0.0-s3",
+                "draft": false,
+                "prerelease": false,
+                "assets": [
+                  {
+                    "name": "archive.sqlite.zst.part-001",
+                    "browser_download_url": "https://example.test/archive.sqlite.zst.part-001",
+                    "size": 12,
+                    "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+                  },
+                  {
+                    "name": "archive.sqlite.zst.part-000",
+                    "browser_download_url": "https://example.test/archive.sqlite.zst.part-000",
+                    "size": 11,
+                    "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                  }
+                ]
+              }
+            ]
+            """;
+
+        using var httpClient = new HttpClient(new StaticJsonHandler(releaseJson));
+        var client = new GitHubUpdateReleaseClient(
+            httpClient,
+            Options.Create(new UpdateOptions()),
+            NullLogger<GitHubUpdateReleaseClient>.Instance);
+
+        var frontendRelease = await client.GetLatestReleaseAsync(UpdateTarget.FrontendArchive, CancellationToken.None);
+        var s3Release = await client.GetLatestReleaseAsync(UpdateTarget.S3Archive, CancellationToken.None);
+
+        Assert.NotNull(frontendRelease);
+        Assert.Equal("v1.1.0-client", frontendRelease.Tag);
+        Assert.Equal("1.1.0", frontendRelease.Version);
+        var frontendManifest = Assert.IsType<ArchiveReleaseManifest>(frontendRelease.Manifest);
+        Assert.Equal("frontend", frontendManifest.Kind);
+        Assert.Equal("frontend.sqlite", frontendManifest.TargetFileName);
+        Assert.Equal("2222222222222222222222222222222222222222222222222222222222222222", frontendManifest.SqliteSha256);
+        Assert.Equal(20, frontendManifest.SqliteSizeBytes);
+
+        Assert.NotNull(s3Release);
+        Assert.Equal("v1.0.0-s3", s3Release.Tag);
+        Assert.Equal("1.0.0", s3Release.Version);
+        var s3Manifest = Assert.IsType<ArchiveReleaseManifest>(s3Release.Manifest);
+        Assert.Equal("s3", s3Manifest.Kind);
+        Assert.Equal("archive.sqlite", s3Manifest.TargetFileName);
+        Assert.Equal("", s3Manifest.SqliteSha256);
+        Assert.Equal(["archive.sqlite.zst.part-000", "archive.sqlite.zst.part-001"], s3Manifest.Assets.Select(static asset => asset.Name));
+        Assert.Equal([0, 1], s3Manifest.Assets.Select(static asset => asset.Order));
     }
 
     [Theory]
@@ -179,17 +281,17 @@ public sealed class UpdateTests
         var manifest = new ArchiveReleaseManifest(
             "s3",
             "1.0.0",
-            "s3-v1.0.0",
+            "v1.0.0-s3",
             "archive.sqlite",
             Sha256File(sqlitePath),
             new FileInfo(sqlitePath).Length,
             [new ArchiveReleaseAsset(assetName, partSha, size, 0)]);
         return new UpdateRelease(
             UpdateTarget.S3Archive,
-            "s3-v1.0.0",
+            "v1.0.0-s3",
             "1.0.0",
-            "s3-v1.0.0",
-            new Uri("https://github.com/OpenGameBuilder/mygamebuilder-archive/releases/tag/s3-v1.0.0"),
+            "v1.0.0-s3",
+            new Uri("https://github.com/OpenGameBuilder/mygamebuilder-archive/releases/tag/v1.0.0-s3"),
             manifest,
             new Dictionary<string, GithubReleaseAsset>(StringComparer.Ordinal)
             {
@@ -277,6 +379,18 @@ public sealed class UpdateTests
             File.Copy(Assets[asset.Name], destinationPath, overwrite: true);
             bytesProgress?.Report(new FileInfo(destinationPath).Length);
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class StaticJsonHandler(string json) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            };
+            return Task.FromResult(response);
         }
     }
 

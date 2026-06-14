@@ -31,7 +31,8 @@ public sealed record ArchiveReleaseAsset(
 public sealed record GithubReleaseAsset(
     string Name,
     Uri DownloadUrl,
-    long SizeBytes);
+    long SizeBytes,
+    string? Sha256 = null);
 
 public sealed record UpdateRelease(
     UpdateTarget Target,

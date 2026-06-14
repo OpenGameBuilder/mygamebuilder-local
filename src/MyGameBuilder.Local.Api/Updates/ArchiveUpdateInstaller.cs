@@ -91,7 +91,10 @@ public sealed class ArchiveUpdateInstaller
             _stateStore.SetWorking(target, "Assembling archive database.", 55);
             var stagedSqlitePath = Path.Combine(prepareDirectory, manifest.TargetFileName);
             SplitArchiveAssembler.EnsureSqliteArchiveReady(stagedSqlitePath, _logger);
-            await Checksum.EnsureSha256FileAsync(stagedSqlitePath, manifest.SqliteSha256, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(manifest.SqliteSha256))
+            {
+                await Checksum.EnsureSha256FileAsync(stagedSqlitePath, manifest.SqliteSha256, cancellationToken).ConfigureAwait(false);
+            }
 
             _stateStore.SetWorking(target, "Validating archive database.", 70);
             ValidateArchive(target, stagedSqlitePath);
