@@ -1,4 +1,4 @@
-name: Prepare Patch
+name: 🩹 Prepare Patch
 
 on:
   workflow_dispatch:

@@ -1,4 +1,4 @@
-name: CD / Release
+name: 🚀 CD / Release
 
 # Dispatch this workflow from main so the latest workflow file is used.
 # For a standard release, leave `ref` as main. For a patch release, set `ref`
@@ -146,13 +146,19 @@ jobs:
 
           Open http://127.0.0.1:3000 after startup.
 
+          Runtime data is stored in your per-user app data folder:
+            Windows: %LOCALAPPDATA%\OpenGameBuilder\MyGameBuilder Local
+            macOS: ~/Library/Application Support/OpenGameBuilder/MyGameBuilder Local
+            Linux: `$XDG_DATA_HOME/OpenGameBuilder/MyGameBuilder Local
+              or ~/.local/share/OpenGameBuilder/MyGameBuilder Local when unset
+
           Optional local data:
-            archive.sqlite        read-only piece archive next to the executable
-            frontend.sqlite       recovered frontend/client archive next to the executable
+            archive.sqlite        read-only piece archive
+            frontend.sqlite       recovered frontend/client archive
 
           GitHub Release archives intentionally do not bundle legacy client,
           frontend, archive, or overlay data. The app creates overlay.sqlite
-          next to the executable for local writes and can install prompted
+          in the app data folder for local writes and can install prompted
           frontend/data archive updates from the in-app setup page.
           "@
           $readme = $readme -replace "(?m)^          ", ""
@@ -174,6 +180,19 @@ jobs:
 
           $stdout = Join-Path $env:RUNNER_TEMP "mygamebuilder-local-$env:RID.out.log"
           $stderr = Join-Path $env:RUNNER_TEMP "mygamebuilder-local-$env:RID.err.log"
+          $dataRoot = Join-Path $env:RUNNER_TEMP "mygamebuilder-local-data-$env:RID"
+          if (Test-Path $dataRoot) {
+            Remove-Item -Path $dataRoot -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force -Path $dataRoot | Out-Null
+
+          $env:PieceStore__ArchivePath = Join-Path $dataRoot "archive.sqlite"
+          $env:PieceStore__OverlayPath = Join-Path $dataRoot "overlay.sqlite"
+          $env:Frontend__ArchivePath = Join-Path $dataRoot "frontend.sqlite"
+          $env:Updates__StagingPath = Join-Path $dataRoot "updates"
+          $env:Updates__BackupPath = Join-Path $dataRoot "backups"
+          $env:Updates__CheckOnStartup = "false"
+
           $process = $null
           $launchToken = "release-smoke-$env:RID-$([Guid]::NewGuid().ToString('N'))"
           $env:MGB_LAUNCH_TOKEN = $launchToken
@@ -203,9 +222,9 @@ jobs:
               throw "Health check did not return the release smoke token before the timeout."
             }
 
-            $overlay = Join-Path $output "overlay.sqlite"
+            $overlay = Join-Path $dataRoot "overlay.sqlite"
             if (-not (Test-Path $overlay)) {
-              throw "Smoke test did not observe overlay.sqlite creation."
+              throw "Smoke test did not observe overlay.sqlite creation at $overlay."
             }
           } catch {
             Write-Host "::group::published app stdout"
