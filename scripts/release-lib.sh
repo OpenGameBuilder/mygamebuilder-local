@@ -95,6 +95,6 @@ gh_output() {
 }
 
 configure_release_bot_git() {
-    git config user.name "github-actions[bot]"
-    git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+    git config user.name "OpenGameBuilder Release Bot"
+    git config user.email "release-bot@users.noreply.github.com"
 }

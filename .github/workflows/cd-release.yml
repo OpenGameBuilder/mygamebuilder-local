@@ -16,8 +16,7 @@ on:
         default: main
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: cd-release
@@ -283,11 +282,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Create release bot token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Checkout
         uses: actions/checkout@v6.0.3
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Download release archives
         uses: actions/download-artifact@v4
@@ -345,7 +354,7 @@ jobs:
 
       - name: Create tag and GitHub Release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ needs.validate.outputs.tag }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
           PREVIOUS_TAG: ${{ needs.validate.outputs.previous_tag }}
@@ -361,8 +370,8 @@ jobs:
             fi
             echo "Tag ${TAG} already exists at the expected SHA."
           else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git config user.name "OpenGameBuilder Release Bot"
+            git config user.email "release-bot@users.noreply.github.com"
             git tag -a "${TAG}" "${SOURCE_SHA}" -m "Release ${TAG}"
             git push origin "refs/tags/${TAG}"
           fi
@@ -381,7 +390,7 @@ jobs:
 
       - name: Open follow-up PR
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           KIND: ${{ needs.validate.outputs.kind }}
           VERSION: ${{ needs.validate.outputs.version }}
           TAG: ${{ needs.validate.outputs.tag }}
