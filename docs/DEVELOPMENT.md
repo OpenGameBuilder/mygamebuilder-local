@@ -51,6 +51,14 @@ The default configuration uses:
 
 - `archive.sqlite` for imported read-only archive content.
 - `overlay.sqlite` for writable local overlay data.
+- `frontend.sqlite` for the archived Flash client and front-end assets.
 - hard-coded in-memory fallback profiles for the special `guest` and `!system` accounts when no archive/overlay profile exists.
 
-The archive file is optional; when it is absent, the app behaves as an empty base archive. The app creates `overlay.sqlite` on startup if it is missing. Overlay objects and tombstones are stored there after the client writes or deletes pieces.
+The frontend archive is required; if `frontend.sqlite` is missing or invalid, the app stops during startup with a clear console error. The piece archive is optional. When `archive.sqlite` is absent, log in as `guest` with any password. When it is present, log in as any archived user with any password. The app creates `overlay.sqlite` on startup if it is missing. Overlay objects and tombstones are stored there after the client writes or deletes pieces.
+
+Startup can rebuild split archive files when the final SQLite file is missing. For `archive.sqlite`
+or `frontend.sqlite`, the app looks for direct parts such as `archive.sqlite.part-000`, or compressed
+parts such as `archive.sqlite.zst.part-000`. Compressed parts are combined into `archive.sqlite.zst`
+and decompressed into `archive.sqlite` before SQLite validation runs.
+
+Archived frontend assets are served from the newest captured body for each URL. HTML, CSS, and JavaScript responses are rewritten on the fly so `mygamebuilder.com` and `s3.amazonaws.com/apphost` URLs point back to the local server.

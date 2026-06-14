@@ -5,8 +5,8 @@ using MyGameBuilder.Local.Api.Http;
 namespace MyGameBuilder.Local.Api.Endpoints;
 
 /// <summary>
-/// Liveness endpoint. The landing page, Ruffle launcher, and static asset serving are
-/// provided by <see cref="FrontendEndpoints"/> and the front-end static-files middleware.
+/// Liveness endpoint. The landing page, Ruffle launcher, and archived asset serving are
+/// provided by <see cref="FrontendEndpoints"/>.
 /// </summary>
 public static class HealthEndpoints
 {

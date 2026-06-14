@@ -11,6 +11,7 @@ The project is part of the OpenGameBuilder preservation effort, but this repo is
 - ASP.NET Core minimal API backend.
 - Wire-compatible XML fragment and SOAP-style endpoints used by the legacy client.
 - SQLite archive/overlay storage for MyGameBuilder pieces.
+- SQLite Wayback archive serving for the recovered Flash client and its assets.
 - Built-in fallback profiles for the special `guest` and `!system` accounts.
 - xUnit coverage for account, piece store, SOAP, fallback profile, and game-stat behavior.
 - Visual Studio and VS Code development setup.

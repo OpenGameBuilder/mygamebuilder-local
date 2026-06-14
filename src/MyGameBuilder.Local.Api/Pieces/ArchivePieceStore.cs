@@ -31,6 +31,8 @@ public sealed class ArchivePieceStore
         _archivePath = archivePath;
     }
 
+    public string ArchivePath => _archivePath;
+
     /// <summary>
     /// Validates an existing archive. A missing archive is allowed and behaves as an
     /// empty base so users can start the local server before downloading content.
