@@ -36,7 +36,8 @@ public sealed class FrontendEndpointsTests
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
-        Assert.Contains("MyGameBuilder Local needs frontend.sqlite", body);
+        Assert.Contains("MyGameBuilder Local needs frontend files", body);
+        Assert.Contains("/_updates", body);
         Assert.Contains("frontend.sqlite", body);
     }
 

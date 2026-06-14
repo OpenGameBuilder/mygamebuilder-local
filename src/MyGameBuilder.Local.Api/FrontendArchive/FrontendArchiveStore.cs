@@ -33,6 +33,14 @@ public sealed class FrontendArchiveStore
 
     public bool IsMissing => !File.Exists(ArchivePath);
 
+    public void ResetSchemaCache()
+    {
+        lock (_schemaGate)
+        {
+            _schemaChecked = false;
+        }
+    }
+
     /// <summary>
     /// Validates the required frontend archive.
     /// </summary>
@@ -280,6 +288,7 @@ public sealed class FrontendArchiveStore
             DataSource = path,
             Mode = SqliteOpenMode.ReadOnly,
             Cache = SqliteCacheMode.Private,
+            Pooling = false,
         }.ToString());
         connection.Open();
         ExecuteNonQuery(connection, "PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");

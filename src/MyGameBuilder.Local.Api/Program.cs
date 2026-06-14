@@ -1,11 +1,24 @@
+using MyGameBuilder.Local.Api.Configuration;
 using MyGameBuilder.Local.Api.Endpoints;
 using MyGameBuilder.Local.Api.Extensions;
+using MyGameBuilder.Local.Api.Updates;
+
+if (SelfUpdateApplier.TryGetPlanPath(args, out var planPath))
+{
+    Environment.ExitCode = await SelfUpdateApplier.ApplyAsync(planPath);
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
-    ContentRootPath = AppContext.BaseDirectory
+    ContentRootPath = ApplicationPaths.ResolveContentRoot()
 });
+
+builder.Configuration.AddJsonFile(
+    Path.Combine(builder.Environment.ContentRootPath, "appsettings.Local.json"),
+    optional: true,
+    reloadOnChange: false);
 
 // Wire-compatible local backend for the legacy MyGameBuilder Flash client, plus a same-origin
 // front-end host (landing page + Ruffle launcher + archived client assets) like the old Python
@@ -20,6 +33,7 @@ var app = builder.Build();
 app.UseCors();
 
 app.MapHealthEndpoints();
+app.MapUpdateEndpoints();
 app.MapFrontendEndpoints();
 app.MapAccountEndpoints();
 app.MapS3SoapEndpoints();

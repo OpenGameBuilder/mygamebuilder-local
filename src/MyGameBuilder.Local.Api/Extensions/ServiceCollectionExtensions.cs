@@ -1,10 +1,12 @@
 using Microsoft.Extensions.Options;
 using MyGameBuilder.Local.Api.Accounts;
 using MyGameBuilder.Local.Api.Configuration;
+using MyGameBuilder.Local.Api.Endpoints;
 using MyGameBuilder.Local.Api.Frontend;
 using MyGameBuilder.Local.Api.GameStats;
 using MyGameBuilder.Local.Api.Pieces;
 using MyGameBuilder.Local.Api.Soap;
+using MyGameBuilder.Local.Api.Updates;
 
 namespace MyGameBuilder.Local.Api.Extensions;
 
@@ -25,6 +27,7 @@ public static class ServiceCollectionExtensions
         services.Configure<PieceStoreOptions>(configuration.GetSection(PieceStoreOptions.SectionName));
         services.Configure<ServerOptions>(configuration.GetSection(ServerOptions.SectionName));
         services.Configure<FrontendOptions>(configuration.GetSection(FrontendOptions.SectionName));
+        services.Configure<UpdateOptions>(configuration.GetSection(UpdateOptions.SectionName));
 
         services.AddCors(options =>
         {
@@ -32,6 +35,10 @@ public static class ServiceCollectionExtensions
                 .AllowAnyOrigin()
                 .AllowAnyHeader()
                 .AllowAnyMethod());
+            options.AddPolicy(UpdateEndpoints.CorsPolicyName, policy =>
+            {
+                policy.SetIsOriginAllowed(_ => false);
+            });
         });
 
         // The launch token is sourced from the environment so a launcher can confirm
@@ -73,6 +80,14 @@ public static class ServiceCollectionExtensions
 
         services.AddHostedService<PieceStoreInitializer>();
         services.AddHostedService<FrontendArchiveInitializer>();
+        services.AddHttpClient<IUpdateReleaseClient, GitHubUpdateReleaseClient>();
+        services.AddSingleton<UpdatePaths>();
+        services.AddSingleton<UpdateStateStore>();
+        services.AddSingleton<UpdateSecurityToken>();
+        services.AddSingleton<ArchiveUpdateInstaller>();
+        services.AddSingleton<AppUpdateInstaller>();
+        services.AddSingleton<UpdateCoordinator>();
+        services.AddHostedService<UpdateBackgroundService>();
         services.AddSingleton<AccountStore>();
         services.AddSingleton<GameStatStore>();
         services.AddSingleton<SoapOperationHandler>();

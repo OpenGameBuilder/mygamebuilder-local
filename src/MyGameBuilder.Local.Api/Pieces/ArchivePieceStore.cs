@@ -33,6 +33,14 @@ public sealed class ArchivePieceStore
 
     public string ArchivePath => _archivePath;
 
+    public void ResetSchemaCache()
+    {
+        lock (_schemaGate)
+        {
+            _schemaChecked = false;
+        }
+    }
+
     /// <summary>
     /// Validates an existing archive. A missing archive is allowed and behaves as an
     /// empty base so users can start the local server before downloading content.

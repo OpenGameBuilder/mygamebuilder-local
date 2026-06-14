@@ -47,6 +47,7 @@ public sealed class BackendFactory : WebApplicationFactory<Program>
                 // Most tests use a tiny valid frontend archive so startup validation can run.
                 ["Frontend:ArchivePath"] = frontendArchivePath,
                 ["Frontend:CaptureDateTime"] = _frontendCaptureDateTime,
+                ["Updates:Enabled"] = "false",
                 // Neutralize the appsettings Kestrel endpoint so the test server binds an ephemeral port.
                 ["Kestrel:Endpoints:Http:Url"] = "http://127.0.0.1:0",
             });

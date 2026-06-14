@@ -13,6 +13,7 @@ internal static class PieceStoreSqlite
             DataSource = path,
             Mode = SqliteOpenMode.ReadOnly,
             Cache = SqliteCacheMode.Private,
+            Pooling = false,
         };
 
         var connection = new SqliteConnection(builder.ToString());
