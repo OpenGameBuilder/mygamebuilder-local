@@ -1,3 +1,5 @@
+using MyGameBuilder.Local.Api.Archives;
+
 namespace MyGameBuilder.Local.Api.Pieces;
 
 /// <summary>Forces piece-store startup work such as validating archive and overlay databases.</summary>
@@ -19,6 +21,7 @@ public sealed class PieceStoreInitializer : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        SplitArchiveAssembler.EnsureSqliteArchiveReady(_archive.ArchivePath, _logger);
         _archive.Initialize();
         _ = _data;
         _logger.LogInformation("SQLite piece-store archive and overlay are ready.");

@@ -2,17 +2,16 @@ using System.Text;
 using Microsoft.Extensions.Options;
 using MyGameBuilder.Local.Api.Configuration;
 using MyGameBuilder.Local.Api.Extensions;
+using MyGameBuilder.Local.Api.Frontend;
 using MyGameBuilder.Local.Api.Http;
 
 namespace MyGameBuilder.Local.Api.Endpoints;
 
 /// <summary>
-/// Front-end browser endpoints: a landing page at <c>/</c>, the Ruffle launcher at
+/// Front-end browser endpoints: the archived site root at <c>/</c>, the Ruffle launcher at
 /// <c>/apphost/MGB.html</c> (the old Python client used <c>/play</c>), the Flash
-/// <c>crossdomain.xml</c> policy, and a friendly 404 for a missing SWF. The SWF and any
-/// auxiliary assets are served as static files from the configured front-end directory
-/// (see <see cref="WebApplicationExtensions.UseFrontend"/>); these endpoints only provide
-/// the server-generated wrapper pages.
+/// <c>crossdomain.xml</c> policy, and archived frontend assets from the frontend SQLite
+/// database.
 /// </summary>
 public static class FrontendEndpoints
 {
@@ -21,35 +20,105 @@ public static class FrontendEndpoints
         ArgumentNullException.ThrowIfNull(app);
 
         var options = app.ServiceProvider.GetRequiredService<IOptions<FrontendOptions>>().Value;
-        var environment = app.ServiceProvider.GetRequiredService<IHostEnvironment>();
-        var frontendRoot = WebApplicationExtensions.ResolveContentPath(environment.ContentRootPath, options.RootPath);
         var swfUrl = $"{WebApplicationExtensions.FrontendRequestPath}/{options.SwfName}";
 
-        // Simple landing page linking to the Ruffle launcher.
-        app.MapGet("/", () => Html(BuildLandingPage(options.SwfName)));
+        app.MapGet(
+            "/",
+            async (
+                HttpRequest request,
+                FrontendArchiveStore frontendArchive,
+                CancellationToken cancellationToken) =>
+        {
+            if (frontendArchive.IsMissing)
+            {
+                return MissingFrontendArchive(frontendArchive.ArchivePath);
+            }
 
-        // Ruffle launcher. A user-supplied MGB.html in the front-end dir would be served by the
-        // static-files middleware first; otherwise this server-generated wrapper is used.
-        app.MapGet(WebApplicationExtensions.PlayPath, () => Html(BuildRufflePage(swfUrl)));
+            var asset = await frontendArchive.GetMyGameBuilderAssetAsync(
+                string.Empty,
+                request.QueryString.Value ?? string.Empty,
+                cancellationToken);
+
+            return asset is null
+                ? Results.Text(
+                    "The recovered MyGameBuilder home page was not found in frontend.sqlite.",
+                    "text/plain",
+                    Encoding.UTF8,
+                    StatusCodes.Status404NotFound)
+                : FrontendAsset(string.Empty, request, asset);
+        });
+
+        // Ruffle launcher. Kept generated so URL rewrite rules point the recovered SWF at the
+        // local backend rather than retired production endpoints.
+        app.MapGet(
+            WebApplicationExtensions.PlayPath,
+            (FrontendArchiveStore frontendArchive) => frontendArchive.IsMissing
+                ? MissingFrontendArchive(frontendArchive.ArchivePath)
+                : Html(BuildRufflePage(swfUrl)));
 
         // Flash cross-domain policy (allow-all is fine for a local single-origin host).
         app.MapGet("/crossdomain.xml", () => XmlResults.Xml(CrossDomainPolicy));
 
-        // Static files serves the SWF when present; this only runs when it is missing, so it
-        // points the user at the exact drop location instead of a bare 404.
-        app.MapGet(swfUrl, () =>
+        app.MapGet(
+            WebApplicationExtensions.FrontendRequestPath + "/{**path}",
+            async (
+                string? path,
+                HttpRequest request,
+                FrontendArchiveStore frontendArchive,
+                CancellationToken cancellationToken) =>
         {
-            var swfPath = Path.Combine(frontendRoot, options.SwfName);
-            if (File.Exists(swfPath))
+            if (frontendArchive.IsMissing)
             {
-                return Results.File(swfPath, "application/x-shockwave-flash");
+                return MissingFrontendArchive(frontendArchive.ArchivePath);
             }
 
-            return Results.Text(
-                $"{options.SwfName} is missing. Place the Flash client at {swfPath} and reload.",
-                "text/plain",
-                Encoding.UTF8,
-                StatusCodes.Status404NotFound);
+            if (string.IsNullOrEmpty(path))
+            {
+                return Results.NotFound();
+            }
+
+            var asset = await frontendArchive.GetAppHostAssetAsync(
+                path,
+                request.QueryString.Value ?? string.Empty,
+                cancellationToken);
+            if (asset is not null)
+            {
+                return FrontendAsset(path, request, asset);
+            }
+
+            if (string.Equals(path.TrimStart('/'), options.SwfName, StringComparison.Ordinal))
+            {
+                return Results.Text(
+                    $"{options.SwfName} was not found in frontend.sqlite.",
+                    "text/plain",
+                    Encoding.UTF8,
+                    StatusCodes.Status404NotFound);
+            }
+
+            return Results.NotFound();
+        });
+
+        app.MapGet(
+            "/{**path}",
+            async (
+                string? path,
+                HttpRequest request,
+                FrontendArchiveStore frontendArchive,
+                CancellationToken cancellationToken) =>
+        {
+            if (frontendArchive.IsMissing)
+            {
+                return MissingFrontendArchive(frontendArchive.ArchivePath);
+            }
+
+            var asset = await frontendArchive.GetMyGameBuilderAssetAsync(
+                path ?? string.Empty,
+                request.QueryString.Value ?? string.Empty,
+                cancellationToken);
+
+            return asset is null
+                ? Results.NotFound()
+                : FrontendAsset(path ?? string.Empty, request, asset);
         });
 
         return app;
@@ -57,13 +126,34 @@ public static class FrontendEndpoints
 
     private static IResult Html(string content) => Results.Text(content, "text/html", Encoding.UTF8);
 
-    private static string BuildLandingPage(string swfName) =>
-        LandingPageTemplate
-            .Replace("__PLAY_URL__", WebApplicationExtensions.PlayPath, StringComparison.Ordinal)
-            .Replace("__SWF_NAME__", swfName, StringComparison.Ordinal);
+    private static IResult MissingFrontendArchive(string archivePath) =>
+        Results.Text(BuildMissingFrontendArchivePage(archivePath), "text/html", Encoding.UTF8, StatusCodes.Status503ServiceUnavailable);
+
+    private static IResult FrontendAsset(string path, HttpRequest request, FrontendArchiveAsset asset)
+    {
+        var body = FrontendUrlRewriter.RewriteIfInspectable(
+            asset.Body,
+            asset.ContentType,
+            path,
+            BuildServerBaseUrl(request));
+        return Results.Bytes(body, asset.ContentType);
+    }
+
+    private static string BuildServerBaseUrl(HttpRequest request) =>
+        $"{request.Scheme}://{request.Host}{request.PathBase}".TrimEnd('/');
 
     private static string BuildRufflePage(string swfUrl) =>
         RufflePageTemplate.Replace("__MGB_SWF_URL__", swfUrl, StringComparison.Ordinal);
+
+    private static string BuildMissingFrontendArchivePage(string archivePath) =>
+        MissingFrontendArchiveTemplate.Replace("__FRONTEND_ARCHIVE_PATH__", HtmlEncode(archivePath), StringComparison.Ordinal);
+
+    private static string HtmlEncode(string value) =>
+        value
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal)
+            .Replace("\"", "&quot;", StringComparison.Ordinal);
 
     private const string CrossDomainPolicy =
         """
@@ -71,34 +161,6 @@ public static class FrontendEndpoints
         <cross-domain-policy>
           <allow-access-from domain="*" />
         </cross-domain-policy>
-        """;
-
-    private const string LandingPageTemplate =
-        """
-        <!doctype html>
-        <html lang="en">
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>MyGameBuilder Local</title>
-          <style>
-            body { margin: 0; padding: 2rem; background: #1e1e1e; color: #eee; font-family: Arial, sans-serif; line-height: 1.6; }
-            main { max-width: 40rem; margin: 0 auto; }
-            a { color: #8ec5ff; }
-            code { background: #2d2d2d; padding: 0.1rem 0.35rem; border-radius: 4px; }
-            .cta { display: inline-block; margin: 1rem 0; padding: 0.6rem 1.1rem; background: #0a64c8; color: #fff; border-radius: 6px; text-decoration: none; }
-          </style>
-        </head>
-        <body>
-        <main>
-          <h1>MyGameBuilder Local</h1>
-          <p>Local backend and Flash front-end for the legacy MyGameBuilder client.</p>
-          <p><a class="cta" href="__PLAY_URL__">Launch MyGameBuilder (Ruffle)</a></p>
-          <p>Use any existing archive user with any password, or log in as <code>guest</code>.</p>
-          <p>The Flash client (<code>__SWF_NAME__</code>) is served from the configured front-end directory under <code>/apphost</code>.</p>
-        </main>
-        </body>
-        </html>
         """;
 
     private const string RufflePageTemplate =
@@ -152,6 +214,33 @@ public static class FrontendEndpoints
             document.getElementById('player').appendChild(player);
             player.load({ url: '__MGB_SWF_URL__' });
           </script>
+        </body>
+        </html>
+        """;
+
+    private const string MissingFrontendArchiveTemplate =
+        """
+        <!doctype html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>MyGameBuilder Local setup needed</title>
+          <style>
+            html, body { min-height: 100%; margin: 0; background: #191b1f; color: #f2f2f2; font-family: Arial, sans-serif; }
+            body { display: grid; place-items: center; padding: 32px; box-sizing: border-box; }
+            main { max-width: 720px; }
+            h1 { font-size: 28px; line-height: 1.2; margin: 0 0 16px; }
+            p { font-size: 16px; line-height: 1.55; margin: 12px 0; color: #d8dce3; }
+            code { color: #ffffff; background: #2a2f38; padding: 2px 5px; border-radius: 4px; }
+          </style>
+        </head>
+        <body>
+          <main>
+            <h1>MyGameBuilder Local needs frontend.sqlite</h1>
+            <p>The server is running, but the recovered client archive was not found at <code>__FRONTEND_ARCHIVE_PATH__</code>.</p>
+            <p>Add <code>frontend.sqlite</code> beside the app, or update <code>Frontend:ArchivePath</code> in <code>appsettings.json</code>, then restart MyGameBuilder Local.</p>
+          </main>
         </body>
         </html>
         """;

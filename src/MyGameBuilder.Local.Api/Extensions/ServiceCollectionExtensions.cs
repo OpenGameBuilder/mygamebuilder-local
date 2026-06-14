@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using MyGameBuilder.Local.Api.Accounts;
 using MyGameBuilder.Local.Api.Configuration;
+using MyGameBuilder.Local.Api.Frontend;
 using MyGameBuilder.Local.Api.GameStats;
 using MyGameBuilder.Local.Api.Pieces;
 using MyGameBuilder.Local.Api.Soap;
@@ -8,10 +9,10 @@ using MyGameBuilder.Local.Api.Soap;
 namespace MyGameBuilder.Local.Api.Extensions;
 
 /// <summary>
-/// Registers the backend's services. Only the piece store is backed by real archive
-/// data; the accounts and game-stats stores are in-memory fakes. SQLite paths in
-/// <see cref="PieceStoreOptions"/> are resolved relative to the content root and are
-/// bound lazily so test hosts can override them before the container is built.
+/// Registers the backend's services. Piece/object data and frontend assets are backed by
+/// SQLite archives; the accounts and game-stats stores are in-memory fakes. SQLite paths are
+/// resolved relative to the content root and are bound lazily so test hosts can override them
+/// before the container is built.
 /// </summary>
 public static class ServiceCollectionExtensions
 {
@@ -59,10 +60,19 @@ public static class ServiceCollectionExtensions
             return new DataPieceStore(ResolvePath(environment.ContentRootPath, options.OverlayPath));
         });
 
+        services.AddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<IOptions<FrontendOptions>>().Value;
+            return new FrontendArchiveStore(
+                ResolvePath(environment.ContentRootPath, options.ArchivePath),
+                options.CaptureDateTime);
+        });
+
         services.AddSingleton<IPieceStore>(provider =>
             new OverlayPieceStore(provider.GetRequiredService<ArchivePieceStore>(), provider.GetRequiredService<DataPieceStore>()));
 
         services.AddHostedService<PieceStoreInitializer>();
+        services.AddHostedService<FrontendArchiveInitializer>();
         services.AddSingleton<AccountStore>();
         services.AddSingleton<GameStatStore>();
         services.AddSingleton<SoapOperationHandler>();
