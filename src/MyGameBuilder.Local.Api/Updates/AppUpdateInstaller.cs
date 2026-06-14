@@ -52,7 +52,16 @@ public sealed class AppUpdateInstaller
 
         if (!SelfUpdateApplier.IsPublishedLayout(_environment.ContentRootPath))
         {
-            throw new InvalidOperationException("App self-update is only available from a published MyGameBuilder Local release folder.");
+            const string message = "App self-update is only available from a published MyGameBuilder Local release folder.";
+            _stateStore.SetError(UpdateTarget.App, message);
+            throw new InvalidOperationException(message);
+        }
+
+        if (!SelfUpdateApplier.CanWriteInstallDirectory(_environment.ContentRootPath))
+        {
+            var message = SelfUpdateApplier.BuildManualUpdateInstructions(release.HtmlUrl);
+            _stateStore.SetError(UpdateTarget.App, message);
+            throw new InvalidOperationException(message);
         }
 
         var rid = RuntimeAssetSelector.CurrentRid();

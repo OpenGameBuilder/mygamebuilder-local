@@ -100,7 +100,7 @@ public sealed class ArchiveUpdateInstaller
             ValidateArchive(target, stagedSqlitePath);
 
             var targetPath = ResolveTargetPath(target);
-            Directory.CreateDirectory(Path.GetDirectoryName(targetPath) ?? _paths.ContentRoot);
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath) ?? _paths.DataRoot);
 
             _stateStore.SetWorking(target, "Backing up existing archive files.", 80);
             var backupDirectory = _paths.CreateBackupDirectory(target);
@@ -121,8 +121,8 @@ public sealed class ArchiveUpdateInstaller
 
     private string ResolveTargetPath(UpdateTarget target) => target switch
     {
-        UpdateTarget.S3Archive => _paths.Resolve(_pieceOptions.Value.ArchivePath),
-        UpdateTarget.FrontendArchive => _paths.Resolve(_frontendOptions.Value.ArchivePath),
+        UpdateTarget.S3Archive => _paths.ResolveDataPath(_pieceOptions.Value.ArchivePath),
+        UpdateTarget.FrontendArchive => _paths.ResolveDataPath(_frontendOptions.Value.ArchivePath),
         _ => throw new ArgumentOutOfRangeException(nameof(target), target, null),
     };
 

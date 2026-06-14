@@ -6,6 +6,8 @@ namespace MyGameBuilder.Local.Api.Updates;
 public static class SelfUpdateApplier
 {
     private static readonly JsonSerializerOptions s_jsonOptions = new(JsonSerializerDefaults.Web);
+    private const string ManualUpdateInstructions =
+        "Automatic app update requires write access to the install folder. Download the latest release and extract it over the existing app folder, or move MyGameBuilder Local to a user-writable folder.";
 
     public static bool TryGetPlanPath(string[] args, out string planPath)
     {
@@ -42,6 +44,51 @@ public static class SelfUpdateApplier
             File.Exists(Path.Combine(processDirectory, "appsettings.json"));
     }
 
+    public static bool CanWriteInstallDirectory(string installDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(installDirectory))
+        {
+            return false;
+        }
+
+        var directory = Path.GetFullPath(installDirectory);
+        if (!Directory.Exists(directory))
+        {
+            return false;
+        }
+
+        var probePath = Path.Combine(directory, ".mgb-write-test-" + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            using (new FileStream(probePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose))
+            {
+            }
+
+            TryDelete(probePath);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            TryDelete(probePath);
+            return false;
+        }
+        catch (IOException)
+        {
+            TryDelete(probePath);
+            return false;
+        }
+    }
+
+    public static string BuildManualUpdateInstructions(Uri? releaseUrl = null)
+    {
+        if (releaseUrl is null)
+        {
+            return ManualUpdateInstructions;
+        }
+
+        return ManualUpdateInstructions + " Release: " + releaseUrl;
+    }
+
     public static async Task<int> ApplyAsync(string planPath, CancellationToken cancellationToken = default)
     {
         var json = await File.ReadAllTextAsync(planPath, cancellationToken).ConfigureAwait(false);
@@ -52,6 +99,18 @@ public static class SelfUpdateApplier
         await using var log = new StreamWriter(new FileStream(plan.LogPath, FileMode.Append, FileAccess.Write, FileShare.Read));
         await LogAsync(log, "Starting app self-update.").ConfigureAwait(false);
         await WaitForOldProcessAsync(plan.OldProcessId, log, cancellationToken).ConfigureAwait(false);
+        if (!CanWriteInstallDirectory(plan.InstallDirectory))
+        {
+            await LogAsync(log, BuildManualUpdateInstructions()).ConfigureAwait(false);
+            var existingExecutablePath = Path.Combine(plan.InstallDirectory, plan.ExecutableName);
+            if (File.Exists(existingExecutablePath))
+            {
+                await LogAsync(log, "Restarting existing app: " + existingExecutablePath).ConfigureAwait(false);
+                StartDetached(existingExecutablePath, plan.InstallDirectory);
+            }
+
+            return 1;
+        }
 
         Directory.CreateDirectory(plan.BackupDirectory);
         BackupReplaceableFiles(plan, log);
@@ -168,6 +227,18 @@ public static class SelfUpdateApplier
             CreateNoWindow = true,
         };
         Process.Start(info);
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // Best-effort cleanup for self-update probe files.
+        }
     }
 
     private static async Task LogAsync(TextWriter writer, string message)

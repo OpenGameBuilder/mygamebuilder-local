@@ -13,7 +13,7 @@ namespace MyGameBuilder.Local.Api.Extensions;
 /// <summary>
 /// Registers the backend's services. Piece/object data and frontend assets are backed by
 /// SQLite archives; the accounts and game-stats stores are in-memory fakes. SQLite paths are
-/// resolved relative to the content root and are bound lazily so test hosts can override them
+/// resolved relative to the per-user data root and are bound lazily so test hosts can override them
 /// before the container is built.
 /// </summary>
 public static class ServiceCollectionExtensions
@@ -28,6 +28,7 @@ public static class ServiceCollectionExtensions
         services.Configure<ServerOptions>(configuration.GetSection(ServerOptions.SectionName));
         services.Configure<FrontendOptions>(configuration.GetSection(FrontendOptions.SectionName));
         services.Configure<UpdateOptions>(configuration.GetSection(UpdateOptions.SectionName));
+        services.AddSingleton(new ApplicationPathRoots(environment.ContentRootPath));
 
         services.AddCors(options =>
         {
@@ -58,20 +59,23 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(provider =>
         {
             var options = provider.GetRequiredService<IOptions<PieceStoreOptions>>().Value;
-            return new ArchivePieceStore(ResolvePath(environment.ContentRootPath, options.ArchivePath));
+            var paths = provider.GetRequiredService<ApplicationPathRoots>();
+            return new ArchivePieceStore(paths.ResolveDataPath(options.ArchivePath));
         });
 
         services.AddSingleton(provider =>
         {
             var options = provider.GetRequiredService<IOptions<PieceStoreOptions>>().Value;
-            return new DataPieceStore(ResolvePath(environment.ContentRootPath, options.OverlayPath));
+            var paths = provider.GetRequiredService<ApplicationPathRoots>();
+            return new DataPieceStore(paths.ResolveDataPath(options.OverlayPath));
         });
 
         services.AddSingleton(provider =>
         {
             var options = provider.GetRequiredService<IOptions<FrontendOptions>>().Value;
+            var paths = provider.GetRequiredService<ApplicationPathRoots>();
             return new FrontendArchiveStore(
-                ResolvePath(environment.ContentRootPath, options.ArchivePath),
+                paths.ResolveDataPath(options.ArchivePath),
                 options.CaptureDateTime);
         });
 
@@ -94,15 +98,5 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SoapOperationHandler>();
 
         return services;
-    }
-
-    private static string ResolvePath(string contentRoot, string configured)
-    {
-        if (string.IsNullOrWhiteSpace(configured))
-        {
-            return contentRoot;
-        }
-
-        return Path.IsPathRooted(configured) ? configured : Path.Combine(contentRoot, configured);
     }
 }

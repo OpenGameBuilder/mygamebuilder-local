@@ -5,36 +5,28 @@ namespace MyGameBuilder.Local.Api.Updates;
 
 public sealed class UpdatePaths
 {
-    private readonly IHostEnvironment _environment;
+    private readonly ApplicationPathRoots _paths;
     private readonly IOptions<UpdateOptions> _options;
 
-    public UpdatePaths(IHostEnvironment environment, IOptions<UpdateOptions> options)
+    public UpdatePaths(ApplicationPathRoots paths, IOptions<UpdateOptions> options)
     {
-        ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(options);
-        _environment = environment;
+        _paths = paths;
         _options = options;
     }
 
-    public string ContentRoot => _environment.ContentRootPath;
+    public string ContentRoot => _paths.ContentRoot;
 
-    public string StagingRoot => Resolve(_options.Value.StagingPath);
+    public string DataRoot => _paths.DataRoot;
 
-    public string BackupRoot => Resolve(_options.Value.BackupPath);
+    public string StagingRoot => ResolveDataPath(_options.Value.StagingPath);
+
+    public string BackupRoot => ResolveDataPath(_options.Value.BackupPath);
 
     public string StatePath => Path.Combine(StagingRoot, "state.json");
 
-    public string Resolve(string configured)
-    {
-        if (string.IsNullOrWhiteSpace(configured))
-        {
-            return _environment.ContentRootPath;
-        }
-
-        return Path.IsPathRooted(configured)
-            ? Path.GetFullPath(configured)
-            : Path.GetFullPath(Path.Combine(_environment.ContentRootPath, configured));
-    }
+    public string ResolveDataPath(string configured) => _paths.ResolveDataPath(configured);
 
     public string CreateOperationStagingDirectory(UpdateTarget target)
     {

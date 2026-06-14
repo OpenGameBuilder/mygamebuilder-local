@@ -11,9 +11,11 @@ public sealed class UpdateOptions
 
     public int CheckIntervalHours { get; set; } = 24;
 
-    public string StagingPath { get; set; } = ".mygamebuilder-updates";
+    /// <summary>Update staging directory. Relative paths resolve under the per-user data root.</summary>
+    public string StagingPath { get; set; } = "updates";
 
-    public string BackupPath { get; set; } = ".mygamebuilder-backups";
+    /// <summary>Update backup directory. Relative paths resolve under the per-user data root.</summary>
+    public string BackupPath { get; set; } = "backups";
 
     public string AppRepository { get; set; } = "OpenGameBuilder/mygamebuilder-local";
 
