@@ -57,11 +57,25 @@ public sealed class UpdateCoordinator
     public UpdateStatusDto GetStatus()
     {
         var state = _stateStore.Snapshot();
-        var frontendPath = _paths.Resolve(_frontendOptions.Value.ArchivePath);
-        var s3Path = _paths.Resolve(_pieceOptions.Value.ArchivePath);
+        var frontendPath = _paths.ResolveDataPath(_frontendOptions.Value.ArchivePath);
+        var s3Path = _paths.ResolveDataPath(_pieceOptions.Value.ArchivePath);
         var appInstalled = CurrentAppVersion();
         var s3Installed = ArchiveVersionReader.ReadReleaseVersion(s3Path);
         var frontendInstalled = ArchiveVersionReader.ReadReleaseVersion(frontendPath);
+        var appPublishedLayout = SelfUpdateApplier.IsPublishedLayout(_environment.ContentRootPath);
+        var appUpdateAvailable = IsUpdateAvailable(state.App.AvailableVersion, appInstalled, missing: false);
+        var appCanInstall = appPublishedLayout;
+        string? appMessageOverride = null;
+        if (appUpdateAvailable && !appPublishedLayout)
+        {
+            appCanInstall = false;
+            appMessageOverride = "App self-update is only available from a published MyGameBuilder Local release folder.";
+        }
+        else if (appUpdateAvailable && !SelfUpdateApplier.CanWriteInstallDirectory(_environment.ContentRootPath))
+        {
+            appCanInstall = false;
+            appMessageOverride = SelfUpdateApplier.BuildManualUpdateInstructions(ParseReleaseUrl(state.App.ReleaseUrl));
+        }
 
         return new UpdateStatusDto(
             _updateOptions.Value.Enabled,
@@ -71,8 +85,9 @@ public sealed class UpdateCoordinator
                 UpdateTarget.App,
                 appInstalled,
                 missing: false,
-                canInstall: SelfUpdateApplier.IsPublishedLayout(_environment.ContentRootPath),
-                state.App),
+                canInstall: appCanInstall,
+                state.App,
+                messageOverride: appMessageOverride),
             BuildTargetStatus(
                 UpdateTarget.S3Archive,
                 s3Installed,
@@ -195,10 +210,10 @@ public sealed class UpdateCoordinator
         string? installedVersion,
         bool missing,
         bool canInstall,
-        UpdateTargetState state)
+        UpdateTargetState state,
+        string? messageOverride = null)
     {
-        var updateAvailable = !string.IsNullOrWhiteSpace(state.AvailableVersion) &&
-            (missing || IsNewer(state.AvailableVersion, installedVersion));
+        var updateAvailable = IsUpdateAvailable(state.AvailableVersion, installedVersion, missing);
 
         return new UpdateTargetStatusDto(
             UpdateTargets.ToId(target),
@@ -212,9 +227,13 @@ public sealed class UpdateCoordinator
             state.DownloadSizeBytes,
             state.State,
             state.ProgressPercent,
-            state.Message,
+            messageOverride ?? state.Message,
             state.LastCheckedUtc);
     }
+
+    private static bool IsUpdateAvailable(string? availableVersion, string? installedVersion, bool missing) =>
+        !string.IsNullOrWhiteSpace(availableVersion) &&
+        (missing || IsNewer(availableVersion, installedVersion));
 
     private static bool IsNewer(string? availableVersion, string? installedVersion)
     {
@@ -232,6 +251,9 @@ public sealed class UpdateCoordinator
             UpdateReleaseSelector.TryParsePrefixedVersion("v" + installedVersion, "v", out var installed, out _) &&
             (available.Major, available.Minor, available.Patch).CompareTo((installed.Major, installed.Minor, installed.Patch)) > 0;
     }
+
+    private static Uri? ParseReleaseUrl(string? releaseUrl) =>
+        Uri.TryCreate(releaseUrl, UriKind.Absolute, out var uri) ? uri : null;
 
     private static string? CurrentAppVersion()
     {

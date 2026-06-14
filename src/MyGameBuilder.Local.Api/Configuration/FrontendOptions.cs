@@ -14,7 +14,7 @@ public sealed class FrontendOptions
     public const string DefaultCaptureDateTime = "2017-05-03";
 
     /// <summary>
-    /// SQLite archive for front-end captures. Relative paths resolve against the content root.
+    /// SQLite archive for front-end captures. Relative paths resolve under the per-user data root.
     /// When this file is missing, the server stays online and serves a friendly setup error.
     /// </summary>
     public string ArchivePath { get; set; } = "frontend.sqlite";

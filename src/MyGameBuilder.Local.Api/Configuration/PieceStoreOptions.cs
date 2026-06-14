@@ -11,13 +11,13 @@ public sealed class PieceStoreOptions
 
     /// <summary>
     /// Read-only unversioned SQLite archive produced by MyGameBuilder.Archive.S3.
-    /// May be absent (treated as an empty base). Relative paths resolve against the content root.
+    /// May be absent (treated as an empty base). Relative paths resolve under the per-user data root.
     /// </summary>
     public string ArchivePath { get; set; } = "archive.sqlite";
 
     /// <summary>
     /// Writable SQLite overlay. Newly written objects and per-key tombstones live here.
-    /// Relative paths resolve against the content root.
+    /// Relative paths resolve under the per-user data root.
     /// </summary>
     public string OverlayPath { get; set; } = "overlay.sqlite";
 }

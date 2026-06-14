@@ -24,12 +24,18 @@ The workflow:
 
 Each archive is self-contained and does not require a preinstalled .NET runtime. After starting the app, open `http://127.0.0.1:3000`.
 
-The release archives intentionally do not include legacy client, frontend, archive, or overlay data. The in-app setup/update page can install published archive releases when they are available. Users may also place optional local data next to the executable:
+The release archives intentionally do not include legacy client, frontend, archive, or overlay data. The in-app setup/update page can install published archive releases when they are available. Runtime data is stored in the per-user app data directory by default:
+
+- Windows: `%LOCALAPPDATA%\OpenGameBuilder\MyGameBuilder Local`
+- macOS: `~/Library/Application Support/OpenGameBuilder/MyGameBuilder Local`
+- Linux: `$XDG_DATA_HOME/OpenGameBuilder/MyGameBuilder Local`, or `~/.local/share/OpenGameBuilder/MyGameBuilder Local` when `XDG_DATA_HOME` is unset.
+
+Users may also place optional local data in that directory:
 
 - `archive.sqlite` for imported read-only piece archive content.
 - `frontend.sqlite` for the recovered frontend/client archive.
 
-The app creates `overlay.sqlite` next to the executable when it starts. That writable local data is never included in release archives.
+The app creates `overlay.sqlite` in the same data directory when it starts. That writable local data is never included in release archives.
 
 The app release manifest has this shape:
 

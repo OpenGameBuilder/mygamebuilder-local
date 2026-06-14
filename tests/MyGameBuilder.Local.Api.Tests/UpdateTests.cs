@@ -159,6 +159,145 @@ public sealed class UpdateTests
     }
 
     [Fact]
+    public void UpdateStatus_ResolvesRelativeArchivePathsUnderDataRoot()
+    {
+        using var current = new TempArchive();
+        var contentRoot = Path.Combine(current.Root, "install");
+        Directory.CreateDirectory(contentRoot);
+        var frontendPath = Path.Combine(current.Root, "frontend.sqlite");
+        TempFrontendArchive.CreateArchive(frontendPath);
+
+        var paths = new ApplicationPathRoots(contentRoot, current.Root);
+        var updateOptions = Options.Create(new UpdateOptions());
+        var pieceOptions = Options.Create(new PieceStoreOptions
+        {
+            ArchivePath = "archive.sqlite",
+            OverlayPath = "overlay.sqlite",
+        });
+        var frontendOptions = Options.Create(new FrontendOptions
+        {
+            ArchivePath = "frontend.sqlite",
+        });
+        var updatePaths = new UpdatePaths(paths, updateOptions);
+        var stateStore = new UpdateStateStore(updatePaths);
+        var fakeClient = new FakeReleaseClient();
+        var environment = new TestEnvironment(contentRoot);
+
+        var archiveInstaller = new ArchiveUpdateInstaller(
+            fakeClient,
+            stateStore,
+            updatePaths,
+            pieceOptions,
+            frontendOptions,
+            new ArchivePieceStore(current.ArchivePath),
+            new FrontendArchiveStore(frontendPath, FrontendOptions.DefaultCaptureDateTime),
+            NullLogger<ArchiveUpdateInstaller>.Instance);
+        var appInstaller = new AppUpdateInstaller(
+            fakeClient,
+            stateStore,
+            updatePaths,
+            environment,
+            new TestApplicationLifetime(),
+            NullLogger<AppUpdateInstaller>.Instance);
+        var coordinator = new UpdateCoordinator(
+            fakeClient,
+            stateStore,
+            archiveInstaller,
+            appInstaller,
+            updatePaths,
+            updateOptions,
+            pieceOptions,
+            frontendOptions,
+            environment,
+            NullLogger<UpdateCoordinator>.Instance);
+
+        var status = coordinator.GetStatus();
+
+        Assert.False(status.FirstRunSetupNeeded);
+        Assert.False(status.S3Archive.Missing);
+        Assert.False(status.FrontendArchive.Missing);
+    }
+
+    [Fact]
+    public void SelfUpdateWritableProbe_ReturnsTrueForWritableDirectory()
+    {
+        using var current = new TempArchive();
+
+        Assert.True(SelfUpdateApplier.CanWriteInstallDirectory(current.Root));
+        Assert.Empty(Directory.EnumerateFiles(current.Root, ".mgb-write-test-*", SearchOption.TopDirectoryOnly));
+    }
+
+    [Fact]
+    public void SelfUpdateWritableProbe_ReturnsFalseForMissingDirectory()
+    {
+        using var current = new TempArchive();
+
+        Assert.False(SelfUpdateApplier.CanWriteInstallDirectory(Path.Combine(current.Root, "missing")));
+    }
+
+    [Fact]
+    public async Task UpdateStatus_WhenAppUpdateAvailableOutsidePublishedLayout_DisablesInstallWithMessage()
+    {
+        using var current = new TempArchive();
+        var contentRoot = Path.Combine(current.Root, "install");
+        Directory.CreateDirectory(contentRoot);
+        var frontendPath = Path.Combine(current.Root, "frontend.sqlite");
+        TempFrontendArchive.CreateArchive(frontendPath);
+
+        var paths = new ApplicationPathRoots(contentRoot, current.Root);
+        var updateOptions = Options.Create(new UpdateOptions());
+        var pieceOptions = Options.Create(new PieceStoreOptions
+        {
+            ArchivePath = "archive.sqlite",
+            OverlayPath = "overlay.sqlite",
+        });
+        var frontendOptions = Options.Create(new FrontendOptions
+        {
+            ArchivePath = "frontend.sqlite",
+        });
+        var updatePaths = new UpdatePaths(paths, updateOptions);
+        var stateStore = new UpdateStateStore(updatePaths);
+        var fakeClient = new FakeReleaseClient();
+        fakeClient.Releases[UpdateTarget.App] = CreateAppRelease("99.0.0");
+        var environment = new TestEnvironment(contentRoot);
+
+        var archiveInstaller = new ArchiveUpdateInstaller(
+            fakeClient,
+            stateStore,
+            updatePaths,
+            pieceOptions,
+            frontendOptions,
+            new ArchivePieceStore(current.ArchivePath),
+            new FrontendArchiveStore(frontendPath, FrontendOptions.DefaultCaptureDateTime),
+            NullLogger<ArchiveUpdateInstaller>.Instance);
+        var appInstaller = new AppUpdateInstaller(
+            fakeClient,
+            stateStore,
+            updatePaths,
+            environment,
+            new TestApplicationLifetime(),
+            NullLogger<AppUpdateInstaller>.Instance);
+        var coordinator = new UpdateCoordinator(
+            fakeClient,
+            stateStore,
+            archiveInstaller,
+            appInstaller,
+            updatePaths,
+            updateOptions,
+            pieceOptions,
+            frontendOptions,
+            environment,
+            NullLogger<UpdateCoordinator>.Instance);
+
+        await coordinator.CheckForUpdatesAsync(CancellationToken.None);
+        var status = coordinator.GetStatus();
+
+        Assert.True(status.App.UpdateAvailable);
+        Assert.False(status.App.CanInstall);
+        Assert.Contains("published MyGameBuilder Local release folder", status.App.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UpdatesPage_ServesUpdateChecker()
     {
         using var pieces = new TempArchive();
@@ -205,7 +344,7 @@ public sealed class UpdateTests
         Assert.Equal("1.0.0", ReadArchiveInfo(current.ArchivePath, "release_version"));
         Assert.Equal(1, CountObjects(current.ArchivePath, "new/p/tile/B"));
         Assert.Equal(0, CountObjects(current.ArchivePath, "old/p/tile/A"));
-        Assert.NotEmpty(Directory.EnumerateFiles(Path.Combine(current.Root, ".mygamebuilder-backups", "s3"), "archive.sqlite", SearchOption.AllDirectories));
+        Assert.NotEmpty(Directory.EnumerateFiles(Path.Combine(current.Root, "backups", "s3"), "archive.sqlite", SearchOption.AllDirectories));
     }
 
     [Fact]
@@ -235,29 +374,28 @@ public sealed class UpdateTests
         TempArchive current,
         out FakeReleaseClient fakeClient)
     {
-        var environment = new TestEnvironment(current.Root);
-        var updateOptions = Options.Create(new UpdateOptions
-        {
-            StagingPath = Path.Combine(current.Root, ".mygamebuilder-updates"),
-            BackupPath = Path.Combine(current.Root, ".mygamebuilder-backups"),
-        });
+        var contentRoot = Path.Combine(current.Root, "install");
+        Directory.CreateDirectory(contentRoot);
+        var paths = new ApplicationPathRoots(contentRoot, current.Root);
+        var updateOptions = Options.Create(new UpdateOptions());
         var pieceOptions = Options.Create(new PieceStoreOptions
         {
-            ArchivePath = current.ArchivePath,
-            OverlayPath = current.OverlayPath,
+            ArchivePath = "archive.sqlite",
+            OverlayPath = "overlay.sqlite",
         });
         var frontendPath = Path.Combine(current.Root, "frontend.sqlite");
         TempFrontendArchive.CreateArchive(frontendPath);
         var frontendOptions = Options.Create(new FrontendOptions
         {
-            ArchivePath = frontendPath,
+            ArchivePath = "frontend.sqlite",
         });
 
         fakeClient = new FakeReleaseClient();
+        var updatePaths = new UpdatePaths(paths, updateOptions);
         return new ArchiveUpdateInstaller(
             fakeClient,
-            new UpdateStateStore(new UpdatePaths(environment, updateOptions)),
-            new UpdatePaths(environment, updateOptions),
+            new UpdateStateStore(updatePaths),
+            updatePaths,
             pieceOptions,
             frontendOptions,
             new ArchivePieceStore(current.ArchivePath),
@@ -296,6 +434,26 @@ public sealed class UpdateTests
             new Dictionary<string, GithubReleaseAsset>(StringComparer.Ordinal)
             {
                 [assetName] = new GithubReleaseAsset(assetName, new Uri("https://example.test/" + assetName), size),
+            });
+    }
+
+    private static UpdateRelease CreateAppRelease(string version)
+    {
+        var asset = new AppReleaseAsset(
+            RuntimeAssetSelector.CurrentRid(),
+            "mygamebuilder-local-test.zip",
+            new string('1', 64),
+            123);
+        return new UpdateRelease(
+            UpdateTarget.App,
+            "v" + version,
+            version,
+            "MyGameBuilder Local " + version,
+            new Uri("https://github.com/OpenGameBuilder/mygamebuilder-local/releases/tag/v" + version),
+            new AppReleaseManifest(version, "v" + version, [asset]),
+            new Dictionary<string, GithubReleaseAsset>(StringComparer.Ordinal)
+            {
+                [asset.Name] = new GithubReleaseAsset(asset.Name, new Uri("https://example.test/" + asset.Name), asset.SizeBytes),
             });
     }
 
@@ -371,8 +529,10 @@ public sealed class UpdateTests
     {
         public Dictionary<string, string> Assets { get; } = new(StringComparer.Ordinal);
 
+        public Dictionary<UpdateTarget, UpdateRelease> Releases { get; } = new();
+
         public Task<UpdateRelease?> GetLatestReleaseAsync(UpdateTarget target, CancellationToken cancellationToken) =>
-            Task.FromResult<UpdateRelease?>(null);
+            Task.FromResult(Releases.TryGetValue(target, out var release) ? release : null);
 
         public Task DownloadAssetAsync(GithubReleaseAsset asset, string destinationPath, IProgress<long>? bytesProgress, CancellationToken cancellationToken)
         {
@@ -394,19 +554,29 @@ public sealed class UpdateTests
         }
     }
 
-    private sealed class TestEnvironment : IHostEnvironment
+    private sealed class TestEnvironment(string contentRootPath) : IHostEnvironment
     {
-        public TestEnvironment(string contentRootPath)
-        {
-            ContentRootPath = contentRootPath;
-        }
-
         public string EnvironmentName { get; set; } = Environments.Development;
 
         public string ApplicationName { get; set; } = "Tests";
 
-        public string ContentRootPath { get; set; }
+        public string ContentRootPath { get; set; } = contentRootPath;
 
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
+
+    private sealed class TestApplicationLifetime : IHostApplicationLifetime
+    {
+        private readonly CancellationTokenSource _started = new();
+        private readonly CancellationTokenSource _stopping = new();
+        private readonly CancellationTokenSource _stopped = new();
+
+        public CancellationToken ApplicationStarted => _started.Token;
+
+        public CancellationToken ApplicationStopping => _stopping.Token;
+
+        public CancellationToken ApplicationStopped => _stopped.Token;
+
+        public void StopApplication() => _stopping.Cancel();
     }
 }

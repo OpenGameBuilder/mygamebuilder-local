@@ -28,15 +28,16 @@ public static class WebApplicationExtensions
         {
             var pieces = app.Services.GetRequiredService<IOptions<PieceStoreOptions>>().Value;
             var frontend = app.Services.GetRequiredService<IOptions<FrontendOptions>>().Value;
-            var contentRoot = app.Environment.ContentRootPath;
+            var paths = app.Services.GetRequiredService<ApplicationPathRoots>();
 
-            var archivePath = ResolveContentPath(contentRoot, pieces.ArchivePath);
-            var overlayPath = ResolveContentPath(contentRoot, pieces.OverlayPath);
-            var frontendArchivePath = ResolveContentPath(contentRoot, frontend.ArchivePath);
+            var archivePath = paths.ResolveDataPath(pieces.ArchivePath);
+            var overlayPath = paths.ResolveDataPath(pieces.OverlayPath);
+            var frontendArchivePath = paths.ResolveDataPath(frontend.ArchivePath);
             var baseUrl = ResolveBrowseUrl(app);
             var frontendCutoffTimestamp = FrontendOptions.ToWaybackTimestamp(frontend.CaptureDateTime);
             WriteStartupBanner(
                 baseUrl,
+                dataRoot: paths.DataRoot,
                 missingPieceArchive: !File.Exists(archivePath),
                 missingFrontendArchive: !File.Exists(frontendArchivePath),
                 configuredFrontendDateTime: frontend.CaptureDateTime,
@@ -48,17 +49,6 @@ public static class WebApplicationExtensions
         });
 
         return app;
-    }
-
-    /// <summary>Resolves a configured path against the content root (absolute paths pass through).</summary>
-    internal static string ResolveContentPath(string contentRoot, string configured)
-    {
-        if (string.IsNullOrWhiteSpace(configured))
-        {
-            return contentRoot;
-        }
-
-        return Path.IsPathRooted(configured) ? configured : Path.Combine(contentRoot, configured);
     }
 
     private static string ResolveBrowseUrl(WebApplication app)
@@ -81,6 +71,7 @@ public static class WebApplicationExtensions
 
     private static void WriteStartupBanner(
         string baseUrl,
+        string dataRoot,
         bool missingPieceArchive,
         bool missingFrontendArchive,
         string configuredFrontendDateTime,
@@ -104,6 +95,8 @@ public static class WebApplicationExtensions
                 WriteCentered("frontend.sqlite was not found.", ConsoleColor.Red);
                 WriteCentered("Open the updates page to install the frontend files:", ConsoleColor.Gray);
                 WriteCentered($"{baseUrl}/updates", ConsoleColor.Yellow);
+                WriteCentered($"Data directory: {dataRoot}", ConsoleColor.DarkGray);
+                WriteCentered($"Overlay database: {overlayPath}", ConsoleColor.DarkGray);
                 WriteCentered("============================================================", ConsoleColor.DarkCyan);
             }
             else
@@ -112,6 +105,8 @@ public static class WebApplicationExtensions
                 WriteCentered("Open this link in your browser:", ConsoleColor.Gray);
                 WriteCentered(baseUrl + "/", ConsoleColor.Yellow);
                 WriteCentered($"Frontend archive date: {configuredFrontendDateTime}", ConsoleColor.Gray);
+                WriteCentered($"Data directory: {dataRoot}", ConsoleColor.DarkGray);
+                WriteCentered($"Overlay database: {overlayPath}", ConsoleColor.DarkGray);
                 WriteCentered(
                     missingPieceArchive
                         ? "Log in as guest with any password."
