@@ -7,8 +7,8 @@ public static class UpdatePageRenderer
     public static string BuildUpdatePage(string csrfToken) =>
         UpdatePageTemplate.Replace("__CSRF_TOKEN__", JavaScriptEncoder.Default.Encode(csrfToken), StringComparison.Ordinal);
 
-    public static string BuildSetupPrompt(string frontendArchivePath) =>
-        SetupPromptTemplate.Replace("__FRONTEND_ARCHIVE_PATH__", HtmlEncoder.Default.Encode(frontendArchivePath), StringComparison.Ordinal);
+    public static string BuildMissingFrontendArchivePage(string archivePath) =>
+        MissingFrontendArchiveTemplate.Replace("__FRONTEND_ARCHIVE_PATH__", HtmlEncoder.Default.Encode(archivePath), StringComparison.Ordinal);
 
     private const string UpdatePageTemplate =
         """
@@ -95,7 +95,7 @@ public static class UpdatePageRenderer
             <section class="grid">
               <article class="card" id="frontend-card">
                 <h2>Frontend files</h2>
-                <p class="message" id="frontend-message"></p>
+                <p class="message" id="frontend-message">frontend.sqlite is missing or ready to update.</p>
                 <div class="meta" id="frontend-meta"></div>
                 <div class="bar"><div id="frontend-progress"></div></div>
                 <div class="actions">
@@ -124,6 +124,9 @@ public static class UpdatePageRenderer
           </main>
           <script>
             const token = "__CSRF_TOKEN__";
+            let busy = false;
+            let autoChecked = false;
+            let frontendPrompted = false;
             const targets = {
               app: { title: "App", installPath: "/_updates/app/install" },
               s3: { title: "S3 data archive", installPath: "/_updates/archives/s3/install" },
@@ -138,6 +141,8 @@ public static class UpdatePageRenderer
             document.getElementById("frontend-install").addEventListener("click", () => post(targets.frontend.installPath));
 
             async function post(path) {
+              if (busy) return;
+              busy = true;
               setBusy(true);
               try {
                 const response = await fetch(path, { method: "POST", headers: { "X-MGB-Update-Token": token } });
@@ -146,6 +151,7 @@ public static class UpdatePageRenderer
               } catch (error) {
                 document.getElementById("summary").textContent = error.message || String(error);
               } finally {
+                busy = false;
                 setBusy(false);
               }
             }
@@ -164,6 +170,23 @@ public static class UpdatePageRenderer
               renderTarget("frontend", status.frontendArchive, true);
               renderTarget("s3", status.s3Archive, false);
               renderTarget("app", status.app, false);
+
+              if (status.enabled && status.frontendArchive.missing && status.frontendArchive.state !== "working") {
+                if (!status.frontendArchive.availableVersion && !autoChecked) {
+                  autoChecked = true;
+                  setTimeout(() => post("/_updates/check"), 100);
+                  return;
+                }
+
+                if (status.frontendArchive.updateAvailable && !frontendPrompted) {
+                  frontendPrompted = true;
+                  setTimeout(() => {
+                    if (confirm("Frontend files are missing. Install the latest frontend archive now?")) {
+                      post(targets.frontend.installPath);
+                    }
+                  }, 100);
+                }
+              }
             }
 
             function renderTarget(id, item, primaryMissing) {
@@ -174,7 +197,7 @@ public static class UpdatePageRenderer
               message.textContent = item.message || (item.missing ? "Not installed." : "Installed.");
               message.classList.toggle("error", item.state === "error");
               document.getElementById(`${id}-progress`).style.width = `${item.progressPercent || 0}%`;
-              install.disabled = !item.canInstall || item.state === "working" || (!item.updateAvailable && !item.missing);
+              install.disabled = !item.canInstall || item.state === "working" || !item.updateAvailable;
               document.getElementById(`${id}-meta`).innerHTML = [
                 ["Installed", item.installedVersion || (item.missing ? "Missing" : "Unknown")],
                 ["Available", item.availableVersion || "None found"],
@@ -212,30 +235,30 @@ public static class UpdatePageRenderer
         </html>
         """;
 
-    private const string SetupPromptTemplate =
+    private const string MissingFrontendArchiveTemplate =
         """
         <!doctype html>
         <html lang="en">
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>MyGameBuilder Local setup</title>
+          <title>MyGameBuilder Local setup needed</title>
           <style>
             html, body { min-height: 100%; margin: 0; background: #191b1f; color: #f2f2f2; font-family: Arial, sans-serif; }
             body { display: grid; place-items: center; padding: 32px; box-sizing: border-box; }
             main { max-width: 760px; }
             h1 { font-size: 28px; line-height: 1.2; margin: 0 0 16px; }
             p { font-size: 16px; line-height: 1.55; margin: 12px 0; color: #d8dce3; }
+            .missing { color: #ff7b7b; font-weight: 700; }
             code { color: #ffffff; background: #2a2f38; padding: 2px 5px; border-radius: 4px; }
-            a { display: inline-block; margin-top: 14px; color: #06130f; background: #55c2a2; text-decoration: none; font-weight: 700; padding: 10px 14px; border-radius: 6px; }
+            a { color: #8ee7c8; font-weight: 700; }
           </style>
         </head>
         <body>
           <main>
-            <h1>MyGameBuilder Local needs frontend files</h1>
-            <p>The server is running, but the recovered client archive was not found at <code>__FRONTEND_ARCHIVE_PATH__</code>.</p>
-            <p>Open setup to install the latest frontend archive. You can also optionally install the S3 data archive there; it is a large download and may take a while.</p>
-            <a href="/_updates">Open setup</a>
+            <h1>MyGameBuilder Local setup needed</h1>
+            <p class="missing">frontend.sqlite was not found at <code>__FRONTEND_ARCHIVE_PATH__</code>.</p>
+            <p><a href="/updates">Open the updates page</a> to install the latest frontend archive. You can also optionally install the S3 data archive there; it is a large download and may take a while.</p>
           </main>
         </body>
         </html>

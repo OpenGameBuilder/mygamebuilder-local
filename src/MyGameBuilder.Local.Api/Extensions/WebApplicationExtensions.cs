@@ -119,7 +119,8 @@ public static class WebApplicationExtensions
             if (missingFrontendArchive)
             {
                 Console.WriteLine();
-                WriteCentered("frontend.sqlite was not found; setup instructions will appear in the browser.", ConsoleColor.Yellow);
+                WriteCentered("frontend.sqlite was not found.", ConsoleColor.Red);
+                WriteCentered($"Install it from {baseUrl}/updates", ConsoleColor.Yellow);
             }
 
             if (frontendDateIsBeforeDefault)

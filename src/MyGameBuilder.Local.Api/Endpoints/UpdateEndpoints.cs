@@ -11,8 +11,10 @@ public static class UpdateEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
 
+        app.MapGet("/_updates", () => Results.Redirect("/updates", permanent: false));
+
         app.MapGet(
-            "/_updates",
+            "/updates",
             (UpdateSecurityToken token) => Results.Text(UpdatePageRenderer.BuildUpdatePage(token.Value), "text/html", Encoding.UTF8))
             .RequireCors(CorsPolicyName);
 
