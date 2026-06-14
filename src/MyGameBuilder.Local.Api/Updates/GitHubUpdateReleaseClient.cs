@@ -267,29 +267,32 @@ public sealed class GitHubUpdateReleaseClient : IUpdateReleaseClient
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            await using var output = new FileStream(
-                tempPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 1024 * 1024,
-                FileOptions.SequentialScan | FileOptions.Asynchronous);
-            var buffer = new byte[1024 * 1024];
-            var total = 0L;
-            while (true)
             {
-                var read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-                if (read == 0)
+                await using var output = new FileStream(
+                    tempPath,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None,
+                    bufferSize: 1024 * 1024,
+                    FileOptions.SequentialScan | FileOptions.Asynchronous);
+                var buffer = new byte[1024 * 1024];
+                var total = 0L;
+                while (true)
                 {
-                    break;
+                    var read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                    total += read;
+                    bytesProgress?.Report(total);
                 }
 
-                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                total += read;
-                bytesProgress?.Report(total);
+                await output.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            await output.FlushAsync(cancellationToken).ConfigureAwait(false);
             File.Move(tempPath, destinationPath, overwrite: true);
         }
         catch

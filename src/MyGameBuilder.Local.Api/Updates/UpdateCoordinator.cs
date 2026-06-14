@@ -214,6 +214,16 @@ public sealed class UpdateCoordinator
         string? messageOverride = null)
     {
         var updateAvailable = IsUpdateAvailable(state.AvailableVersion, installedVersion, missing);
+        var effectiveCanInstall = canInstall && updateAvailable && state.State != "working";
+        var message = messageOverride ?? state.Message;
+        if (messageOverride is null &&
+            state.State is not ("working" or "error") &&
+            !missing &&
+            !updateAvailable &&
+            !string.IsNullOrWhiteSpace(state.AvailableVersion))
+        {
+            message = "Up to date.";
+        }
 
         return new UpdateTargetStatusDto(
             UpdateTargets.ToId(target),
@@ -221,13 +231,13 @@ public sealed class UpdateCoordinator
             state.AvailableVersion,
             missing,
             updateAvailable,
-            canInstall,
+            effectiveCanInstall,
             state.ReleaseName,
             state.ReleaseUrl,
             state.DownloadSizeBytes,
             state.State,
             state.ProgressPercent,
-            messageOverride ?? state.Message,
+            message,
             state.LastCheckedUtc);
     }
 

@@ -107,6 +107,9 @@ public static class UpdatePageRenderer
               text-shadow: none;
               transform: none;
             }
+            button:disabled img {
+              opacity: .58;
+            }
             p { margin: 0; }
             .stage-shell {
               width: min(980px, calc(100vw - 24px));
@@ -291,6 +294,10 @@ public static class UpdatePageRenderer
               min-height: 19px;
             }
             .message.warning { color: #7a5800; }
+            .message.current {
+              color: var(--green);
+              font-weight: bold;
+            }
             .message.error {
               color: #b00000;
               font-weight: bold;
@@ -520,7 +527,7 @@ public static class UpdatePageRenderer
                 <div class="meta" id="frontend-meta"></div>
                 <div class="bar"><div id="frontend-progress"></div></div>
                 <div class="actions">
-                            <button class="primary" id="frontend-install" type="button"><img class="button-icon" src="/_updates/flash-assets/save.png" alt="">Install frontend</button>
+                            <button class="primary" id="frontend-install" type="button"><img class="button-icon" src="/_updates/flash-assets/save.png" alt=""><span id="frontend-install-label">Install frontend</span></button>
                           </div>
                 </div>
               </article>
@@ -535,7 +542,7 @@ public static class UpdatePageRenderer
                 <div class="meta" id="s3-meta"></div>
                 <div class="bar"><div id="s3-progress"></div></div>
                 <div class="actions">
-                            <button id="s3-install" type="button"><img class="button-icon" src="/_updates/flash-assets/save.png" alt="">Install data archive</button>
+                            <button id="s3-install" type="button"><img class="button-icon" src="/_updates/flash-assets/save.png" alt=""><span id="s3-install-label">Install data archive</span></button>
                           </div>
                 </div>
               </article>
@@ -550,7 +557,7 @@ public static class UpdatePageRenderer
                 <div class="meta" id="app-meta"></div>
                 <div class="bar"><div id="app-progress"></div></div>
                 <div class="actions">
-                            <button id="app-install" type="button"><img class="button-icon" src="/_updates/flash-assets/play.png" alt="">Install app update</button>
+                            <button id="app-install" type="button"><img class="button-icon" src="/_updates/flash-assets/play.png" alt=""><span id="app-install-label">Install app update</span></button>
                           </div>
                 </div>
               </article>
@@ -571,9 +578,9 @@ public static class UpdatePageRenderer
             let autoChecked = false;
             let frontendPrompted = false;
             const targets = {
-              app: { title: "App", installPath: "/_updates/app/install" },
-              s3: { title: "S3 data archive", installPath: "/_updates/archives/s3/install" },
-              frontend: { title: "Frontend files", installPath: "/_updates/archives/frontend/install" },
+              app: { title: "App", installPath: "/_updates/app/install", installLabel: "Install app update" },
+              s3: { title: "S3 data archive", installPath: "/_updates/archives/s3/install", installLabel: "Install data archive" },
+              frontend: { title: "Frontend files", installPath: "/_updates/archives/frontend/install", installLabel: "Install frontend" },
             };
 
             document.getElementById("check").addEventListener("click", () => post("/_updates/check"));
@@ -636,20 +643,51 @@ public static class UpdatePageRenderer
             function renderTarget(id, item, primaryMissing) {
               const message = document.getElementById(`${id}-message`);
               const install = document.getElementById(`${id}-install`);
+              const installLabel = document.getElementById(`${id}-install-label`);
               const card = document.getElementById(`${id}-card`);
+              const current = !item.missing && Boolean(item.availableVersion) && !item.updateAvailable;
               card.classList.toggle("setup", Boolean(primaryMissing && item.missing));
               card.dataset.state = item.state || "unknown";
               card.dataset.missing = item.missing ? "true" : "false";
+              card.dataset.current = current ? "true" : "false";
               message.textContent = item.message || (item.missing ? "Not installed." : "Installed.");
               message.classList.toggle("error", item.state === "error");
+              message.classList.toggle("current", current);
               document.getElementById(`${id}-progress`).style.width = `${item.progressPercent || 0}%`;
               install.disabled = !item.canInstall || item.state === "working" || !item.updateAvailable;
+              install.title = install.disabled ? disabledReason(item) : "";
+              installLabel.textContent = installButtonLabel(id, item);
               document.getElementById(`${id}-meta`).innerHTML = [
                 ["Installed", item.installedVersion || (item.missing ? "Missing" : "Unknown")],
                 ["Available", item.availableVersion || "None found"],
                 ["Download", formatBytes(item.downloadSizeBytes)],
-                ["State", item.state],
+                ["Status", statusLabel(item)],
               ].map(([label, value]) => `<div><span>${label}</span><span>${escapeHtml(value)}</span></div>`).join("");
+            }
+
+            function installButtonLabel(id, item) {
+              if (item.state === "working") return "Working...";
+              if (!item.updateAvailable && item.availableVersion && !item.missing) return "Up to date";
+              if (!item.updateAvailable && !item.availableVersion) return "No release found";
+              if (!item.canInstall) return "Unavailable";
+              return targets[id].installLabel;
+            }
+
+            function disabledReason(item) {
+              if (item.state === "working") return "This update is already in progress.";
+              if (!item.updateAvailable && item.availableVersion && !item.missing) return "This component is up to date.";
+              if (!item.updateAvailable && !item.availableVersion) return "No release is available for this component yet.";
+              if (!item.canInstall) return item.message || "This component cannot be installed right now.";
+              return "";
+            }
+
+            function statusLabel(item) {
+              if (item.state === "working") return "Working";
+              if (item.state === "error") return "Error";
+              if (item.missing) return item.updateAvailable ? "Ready to install" : "Missing";
+              if (item.updateAvailable) return "Update available";
+              if (item.availableVersion) return "Up to date";
+              return item.state || "Idle";
             }
 
             function renderLog(status) {

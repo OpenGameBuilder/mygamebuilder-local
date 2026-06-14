@@ -129,6 +129,32 @@ public sealed class UpdateTests
         Assert.Equal([0, 1], s3Manifest.Assets.Select(static asset => asset.Order));
     }
 
+    [Fact]
+    public async Task GitHubReleaseClient_DownloadAssetAsync_ReplacesDestinationAfterClosingDownloadFile()
+    {
+        var bytes = Encoding.UTF8.GetBytes("updated frontend archive bytes");
+        using var current = new TempArchive(createArchive: false);
+        var destinationPath = Path.Combine(current.Root, "frontend.sqlite");
+        await File.WriteAllTextAsync(destinationPath, "old");
+        var progressValues = new List<long>();
+
+        using var httpClient = new HttpClient(new StaticBytesHandler(bytes));
+        var client = new GitHubUpdateReleaseClient(
+            httpClient,
+            Options.Create(new UpdateOptions()),
+            NullLogger<GitHubUpdateReleaseClient>.Instance);
+
+        await client.DownloadAssetAsync(
+            new GithubReleaseAsset("frontend.sqlite", new Uri("https://example.test/frontend.sqlite"), bytes.Length),
+            destinationPath,
+            new InlineProgress<long>(progressValues.Add),
+            CancellationToken.None);
+
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(destinationPath));
+        Assert.False(File.Exists(destinationPath + ".download"));
+        Assert.Contains(bytes.Length, progressValues);
+    }
+
     [Theory]
     [InlineData("overlay.sqlite")]
     [InlineData("archive.sqlite")]
@@ -298,6 +324,69 @@ public sealed class UpdateTests
     }
 
     [Fact]
+    public async Task UpdateStatus_WhenArchiveVersionMatchesLatest_DisablesInstallWithUpToDateMessage()
+    {
+        using var current = new TempArchive();
+        SetArchiveInfo(current.ArchivePath, "release_version", "1.0.0");
+        var contentRoot = Path.Combine(current.Root, "install");
+        Directory.CreateDirectory(contentRoot);
+        var frontendPath = Path.Combine(current.Root, "frontend.sqlite");
+        TempFrontendArchive.CreateArchive(frontendPath);
+
+        var paths = new ApplicationPathRoots(contentRoot, current.Root);
+        var updateOptions = Options.Create(new UpdateOptions());
+        var pieceOptions = Options.Create(new PieceStoreOptions
+        {
+            ArchivePath = "archive.sqlite",
+            OverlayPath = "overlay.sqlite",
+        });
+        var frontendOptions = Options.Create(new FrontendOptions
+        {
+            ArchivePath = "frontend.sqlite",
+        });
+        var updatePaths = new UpdatePaths(paths, updateOptions);
+        var stateStore = new UpdateStateStore(updatePaths);
+        var fakeClient = new FakeReleaseClient();
+        fakeClient.Releases[UpdateTarget.S3Archive] = CreateArchiveRelease(UpdateTarget.S3Archive, "1.0.0");
+        var environment = new TestEnvironment(contentRoot);
+
+        var archiveInstaller = new ArchiveUpdateInstaller(
+            fakeClient,
+            stateStore,
+            updatePaths,
+            pieceOptions,
+            frontendOptions,
+            new ArchivePieceStore(current.ArchivePath),
+            new FrontendArchiveStore(frontendPath, FrontendOptions.DefaultCaptureDateTime),
+            NullLogger<ArchiveUpdateInstaller>.Instance);
+        var appInstaller = new AppUpdateInstaller(
+            fakeClient,
+            stateStore,
+            updatePaths,
+            environment,
+            new TestApplicationLifetime(),
+            NullLogger<AppUpdateInstaller>.Instance);
+        var coordinator = new UpdateCoordinator(
+            fakeClient,
+            stateStore,
+            archiveInstaller,
+            appInstaller,
+            updatePaths,
+            updateOptions,
+            pieceOptions,
+            frontendOptions,
+            environment,
+            NullLogger<UpdateCoordinator>.Instance);
+
+        await coordinator.CheckForUpdatesAsync(CancellationToken.None);
+        var status = coordinator.GetStatus();
+
+        Assert.False(status.S3Archive.UpdateAvailable);
+        Assert.False(status.S3Archive.CanInstall);
+        Assert.Equal("Up to date.", status.S3Archive.Message);
+    }
+
+    [Fact]
     public async Task UpdatesPage_ServesUpdateChecker()
     {
         using var pieces = new TempArchive();
@@ -457,6 +546,25 @@ public sealed class UpdateTests
             });
     }
 
+    private static UpdateRelease CreateArchiveRelease(UpdateTarget target, string version)
+    {
+        var (kind, tagSuffix, targetFileName) = target switch
+        {
+            UpdateTarget.S3Archive => ("s3", "-s3", "archive.sqlite"),
+            UpdateTarget.FrontendArchive => ("frontend", "-client", "frontend.sqlite"),
+            _ => throw new ArgumentOutOfRangeException(nameof(target), target, null),
+        };
+        var tag = "v" + version + tagSuffix;
+        return new UpdateRelease(
+            target,
+            tag,
+            version,
+            tag,
+            new Uri("https://github.com/OpenGameBuilder/mygamebuilder-archive/releases/tag/" + tag),
+            new ArchiveReleaseManifest(kind, version, tag, targetFileName, string.Empty, 0, []),
+            new Dictionary<string, GithubReleaseAsset>(StringComparer.Ordinal));
+    }
+
     private static byte[] CompressZstd(byte[] bytes)
     {
         using var output = new MemoryStream();
@@ -552,6 +660,23 @@ public sealed class UpdateTests
             };
             return Task.FromResult(response);
         }
+    }
+
+    private sealed class StaticBytesHandler(byte[] bytes) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(bytes),
+            };
+            return Task.FromResult(response);
+        }
+    }
+
+    private sealed class InlineProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value) => handler(value);
     }
 
     private sealed class TestEnvironment(string contentRootPath) : IHostEnvironment
