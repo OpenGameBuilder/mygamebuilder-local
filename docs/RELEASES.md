@@ -48,7 +48,7 @@ The app release manifest has this shape:
 }
 ```
 
-Archive releases are published from `OpenGameBuilder/mygamebuilder-archive` with tags `frontend-vX.Y.Z` and `s3-vX.Y.Z`. Each archive release must include `mgb-archive-manifest.json`, `SHA256SUMS.txt`, and the manifest-listed SQLite or split zstd SQLite assets. The app verifies every listed asset hash and the final SQLite hash before replacing a live archive.
+Archive releases are published from `OpenGameBuilder/mygamebuilder-archive` with tags `vX.Y.Z-client` for frontend/client files and `vX.Y.Z-s3` for S3 archive files. Releases may include `mgb-archive-manifest.json`, `SHA256SUMS.txt`, and the manifest-listed SQLite or split zstd SQLite assets. When no manifest asset is present, the app derives archive metadata from release assets named like `frontend.sqlite`, `archive.sqlite`, or `archive.sqlite.zst.part-000` and verifies their GitHub SHA-256 digests before validating the SQLite database.
 
 macOS release binaries are unsigned. Depending on how the archive was downloaded, users may need to allow the binary in **System Settings > Privacy & Security** or remove the quarantine attribute from the extracted executable:
 

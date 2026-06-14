@@ -7,7 +7,8 @@ public static partial class UpdateReleaseSelector
     public static IReadOnlyList<T> OrderByLatest<T>(
         IEnumerable<T> releases,
         Func<T, string> tagSelector,
-        string prefix)
+        string prefix,
+        string suffix = "")
     {
         ArgumentNullException.ThrowIfNull(releases);
         ArgumentNullException.ThrowIfNull(tagSelector);
@@ -16,7 +17,7 @@ public static partial class UpdateReleaseSelector
             .Select(release => new
             {
                 Release = release,
-                Parsed = TryParsePrefixedVersion(tagSelector(release), prefix, out var version, out _) ? (SemanticVersion?)version : null,
+                Parsed = TryParseTaggedVersion(tagSelector(release), prefix, suffix, out var version, out _) ? (SemanticVersion?)version : null,
             })
             .Where(static item => item.Parsed is not null)
             .OrderByDescending(static item => item.Parsed!.Value.Major)
@@ -28,15 +29,27 @@ public static partial class UpdateReleaseSelector
 
     public static bool TryParsePrefixedVersion(string tag, string prefix, out SemanticVersion version, out string normalized)
     {
+        return TryParseTaggedVersion(tag, prefix, suffix: string.Empty, out version, out normalized);
+    }
+
+    public static bool TryParseTaggedVersion(string tag, string prefix, string suffix, out SemanticVersion version, out string normalized)
+    {
         version = default;
         normalized = string.Empty;
 
-        if (!tag.StartsWith(prefix, StringComparison.Ordinal))
+        if (!tag.StartsWith(prefix, StringComparison.Ordinal) ||
+            !tag.EndsWith(suffix, StringComparison.Ordinal))
         {
             return false;
         }
 
-        var text = tag[prefix.Length..];
+        var suffixLength = suffix.Length;
+        var text = tag[prefix.Length..^suffixLength];
+        if (suffixLength == 0)
+        {
+            text = tag[prefix.Length..];
+        }
+
         var match = SemverRegex().Match(text);
         if (!match.Success)
         {
