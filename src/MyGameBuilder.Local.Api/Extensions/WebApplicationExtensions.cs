@@ -14,6 +14,9 @@ public static class WebApplicationExtensions
     /// <summary>Request path the archived front-end is mounted under (matches the client's <c>apphost/</c> URLs).</summary>
     public const string FrontendRequestPath = "/apphost";
 
+    /// <summary>Request path for the bundled Ruffle web runtime.</summary>
+    public const string RuffleRequestPath = "/ruffle";
+
     /// <summary>Well-known route of the Ruffle launcher page (the old client used <c>/play</c>).</summary>
     public const string PlayPath = FrontendRequestPath + "/MGB.html";
 

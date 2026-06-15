@@ -63,6 +63,56 @@ public sealed class FrontendEndpointsTests
     }
 
     [Fact]
+    public async Task RuffleLauncher_LoadsPackagedRuffleRuntime()
+    {
+        using var pieces = new TempArchive();
+        using var factory = new BackendFactory(pieces);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/apphost/MGB.html");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("""<script src="/ruffle/ruffle.js"></script>""", body);
+        Assert.DoesNotContain("preferredRenderer", body);
+        Assert.DoesNotContain("unpkg.com", body);
+        Assert.DoesNotContain("jsdelivr", body);
+    }
+
+    [Fact]
+    public async Task RuffleAsset_ServesPackagedRuntimeEvenWhenFrontendArchiveMissing()
+    {
+        using var pieces = new TempArchive();
+        var missingFrontendArchive = Path.Combine(pieces.Root, "missing-frontend.sqlite");
+        using var factory = new BackendFactory(pieces, missingFrontendArchive);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/ruffle/ruffle.js");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/javascript", response.Content.Headers.ContentType?.MediaType);
+        var expectedBytes = await File.ReadAllBytesAsync(
+            Path.Combine(AppContext.BaseDirectory, "Assets", "Ruffle", "ruffle.js"));
+        Assert.Equal(expectedBytes, await response.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
+    public async Task RuffleAsset_ServesPackagedWasmWithExpectedContentType()
+    {
+        using var pieces = new TempArchive();
+        using var factory = new BackendFactory(pieces);
+        using var client = factory.CreateClient();
+        var ruffleAssetDirectory = Path.Combine(AppContext.BaseDirectory, "Assets", "Ruffle");
+        var wasmFileName = Path.GetFileName(Directory.EnumerateFiles(ruffleAssetDirectory, "*.wasm").First());
+
+        var response = await client.GetAsync("/ruffle/" + wasmFileName);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/wasm", response.Content.Headers.ContentType?.MediaType);
+        Assert.True((await response.Content.ReadAsByteArrayAsync()).Length > 0);
+    }
+
+    [Fact]
     public async Task AppHostAsset_ServesSwfFromFrontendArchive()
     {
         using var pieces = new TempArchive();

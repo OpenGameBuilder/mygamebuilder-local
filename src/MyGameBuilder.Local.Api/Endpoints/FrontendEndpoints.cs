@@ -65,6 +65,10 @@ public static class FrontendEndpoints
         app.MapGet("/favicon.ico", (IHostEnvironment environment) => ServeFavicon(environment));
 
         app.MapGet(
+            WebApplicationExtensions.RuffleRequestPath + "/{fileName}",
+            (string? fileName, IHostEnvironment environment) => ServeRuffleAsset(fileName, environment));
+
+        app.MapGet(
             WebApplicationExtensions.FrontendRequestPath + "/{**path}",
             async (
                 string? path,
@@ -140,7 +144,7 @@ public static class FrontendEndpoints
     {
         ArgumentNullException.ThrowIfNull(environment);
 
-        var path = ResolveFaviconPath(environment);
+        var path = ResolvePackagedAssetPath(environment, Path.Combine("Assets", "favicon.ico"));
         if (!File.Exists(path))
         {
             return Results.NotFound();
@@ -153,14 +157,45 @@ public static class FrontendEndpoints
             enableRangeProcessing: false);
     }
 
-    private static string ResolveFaviconPath(IHostEnvironment environment)
+    private static IResult ServeRuffleAsset(string? fileName, IHostEnvironment environment)
     {
-        var relativePath = Path.Combine("Assets", "favicon.ico");
+        ArgumentNullException.ThrowIfNull(environment);
+
+        if (string.IsNullOrWhiteSpace(fileName) || !string.Equals(fileName, Path.GetFileName(fileName), StringComparison.Ordinal))
+        {
+            return Results.NotFound();
+        }
+
+        var path = ResolvePackagedAssetPath(environment, Path.Combine("Assets", "Ruffle", fileName));
+        if (!File.Exists(path))
+        {
+            return Results.NotFound();
+        }
+
+        return Results.File(
+            path,
+            GetRuffleContentType(fileName),
+            lastModified: File.GetLastWriteTimeUtc(path),
+            enableRangeProcessing: true);
+    }
+
+    private static string ResolvePackagedAssetPath(IHostEnvironment environment, string relativePath)
+    {
         var outputPath = Path.Combine(AppContext.BaseDirectory, relativePath);
         return File.Exists(outputPath)
             ? outputPath
             : Path.Combine(environment.ContentRootPath, relativePath);
     }
+
+    private static string GetRuffleContentType(string fileName) =>
+        Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".js" => "application/javascript",
+            ".wasm" => "application/wasm",
+            ".map" or ".json" => "application/json",
+            ".md" => "text/markdown; charset=utf-8",
+            _ => "text/plain; charset=utf-8",
+        };
 
     private static IResult FrontendAsset(string path, HttpRequest request, FrontendArchiveAsset asset)
     {
@@ -231,7 +266,7 @@ public static class FrontendEndpoints
               ],
             };
           </script>
-          <script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
+          <script src="/ruffle/ruffle.js"></script>
           <script>
             const ruffle = window.RufflePlayer.newest();
             const player = ruffle.createPlayer();
