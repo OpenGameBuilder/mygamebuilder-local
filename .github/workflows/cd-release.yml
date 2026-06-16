@@ -286,7 +286,7 @@ jobs:
           }
 
       - name: Upload release archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.rid }}
           path: artifacts/dist/mygamebuilder-local-${{ needs.validate.outputs.version }}-${{ matrix.rid }}.${{ matrix.archive_ext }}
@@ -318,7 +318,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Download release archives
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts/dist
           pattern: release-*
